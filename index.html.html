@@ -1,0 +1,2594 @@
+<!--
+=================================================================
+SETUP SUPABASE — RODE ESTE SQL UMA VEZ NO SQL EDITOR DO SUPABASE
+=================================================================
+
+create table if not exists dados (
+  id integer primary key default 1,
+  contratos jsonb default '[]'::jsonb,
+  pagamentos jsonb default '{}'::jsonb,
+  config jsonb default '{}'::jsonb,
+  socios jsonb default '[]'::jsonb,
+  atualizado_em timestamptz default now()
+);
+
+-- Permitir acesso anônimo (sua anon key já autentica)
+alter table dados enable row level security;
+create policy "acesso_total" on dados for all using (true) with check (true);
+
+=================================================================
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão de Contratos</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c28;--surface3:#22223a;
+  --accent:#00ff88;--accent2:#ff4466;--accent3:#ffaa00;--accent4:#44aaff;--accent5:#cc88ff;
+  --text:#e8e8f0;--muted:#6b6b80;--border:#2a2a3a;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;padding:18px 13px 70px;}
+h1{font-size:24px;font-weight:800;letter-spacing:-1px;color:var(--accent);margin-bottom:2px;}
+.subtitle{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:8px;}
+.today-bar{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+.today{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent3);background:#1a1500;border:1px solid #3a3000;display:inline-block;padding:3px 9px;border-radius:4px;}
+.tabs{display:flex;gap:1px;margin-bottom:16px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{padding:8px 11px;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;cursor:pointer;border:none;background:transparent;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;white-space:nowrap;flex-shrink:0;}
+.tab.active{color:var(--accent);border-bottom:2px solid var(--accent);}
+.tab-content{display:none;}.tab-content.active{display:block;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group.full{grid-column:1/-1;}
+label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-family:'Space Mono',monospace;font-size:12px;outline:none;transition:border .2s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+select option{background:var(--surface2);}
+textarea{resize:vertical;min-height:60px;line-height:1.5;}
+.hidden{display:none!important;}
+.section-title{font-size:10px;font-weight:700;color:var(--accent3);text-transform:uppercase;letter-spacing:1px;grid-column:1/-1;margin-top:4px;padding-top:10px;border-top:1px solid var(--border);}
+.section-title.first{border-top:none;margin-top:0;padding-top:0;}
+.btn-primary{background:var(--accent);color:#000;border:none;padding:11px 20px;border-radius:6px;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;cursor:pointer;width:100%;transition:opacity .2s;}
+.btn-primary:hover{opacity:.85;}
+.btn-danger{background:var(--accent2);color:#fff;border:none;padding:11px 20px;border-radius:6px;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;cursor:pointer;width:100%;transition:opacity .2s;}
+.summary-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.card-label{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.card-value{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;}
+.green{color:var(--accent);}.red{color:var(--accent2);}.yellow{color:var(--accent3);}.blue{color:var(--accent4);}.purple{color:var(--accent5);}
+/* ALERT */
+.alert-box{background:#1a0a00;border:1px solid var(--accent3);border-radius:8px;padding:11px;margin-bottom:12px;}
+.alert-title{font-size:10px;font-weight:700;color:var(--accent3);margin-bottom:7px;}
+.alert-item{font-size:11px;color:var(--text);padding:3px 0;border-bottom:1px solid #2a1500;display:flex;justify-content:space-between;}
+.alert-item:last-child{border-bottom:none;}
+/* CONTRATO CARD */
+.contrato{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;position:relative;}
+.contrato.quitado{opacity:.6;border-color:#003a20;}
+.contrato-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;padding-right:115px;}
+.contrato-nome{font-size:14px;font-weight:800;}
+.contrato-tipo{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:1px;}
+.badge{font-family:'Space Mono',monospace;font-size:9px;padding:2px 6px;border-radius:20px;font-weight:700;white-space:nowrap;}
+.badge-vencido{background:#2a0010;color:var(--accent2);border:1px solid var(--accent2);}
+.badge-ok{background:#002a15;color:var(--accent);border:1px solid var(--accent);}
+.badge-vence{background:#2a1a00;color:var(--accent3);border:1px solid var(--accent3);}
+.badge-carencia{background:#001a2a;color:var(--accent4);border:1px solid var(--accent4);}
+.badge-quitado{background:#003a20;color:#00cc66;border:1px solid #00cc66;}
+.badge-parcial{background:#1a1a00;color:var(--accent3);border:1px solid var(--accent3);}
+.badge-reparc{background:#1a0a2a;color:var(--accent5);border:1px solid var(--accent5);}
+.contrato-info{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+.info-item{font-size:10px;color:var(--muted);}
+.info-item span{color:var(--text);font-family:'Space Mono',monospace;}
+.contrato-total{background:var(--surface2);border-radius:6px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;}
+.total-label{font-size:10px;color:var(--muted);}
+.total-value{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
+.sua-parte{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent3);margin-top:2px;text-align:right;}
+.btn-actions{position:absolute;top:10px;right:10px;display:flex;gap:3px;flex-wrap:wrap;max-width:120px;justify-content:flex-end;}
+.btn-icon{background:transparent;border:1px solid var(--border);color:var(--muted);width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.btn-icon.del:hover{border-color:var(--accent2);color:var(--accent2);}
+.btn-icon.edit:hover{border-color:var(--accent);color:var(--accent);}
+.btn-icon.msg:hover{border-color:var(--accent3);color:var(--accent3);}
+.btn-icon.pay:hover{border-color:var(--accent);color:var(--accent);}
+.btn-icon.ant:hover{border-color:var(--accent4);color:var(--accent4);}
+.btn-icon.ren:hover{border-color:var(--accent5);color:var(--accent5);}
+.btn-icon.evo:hover{border-color:var(--accent3);color:var(--accent3);}
+.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px;}
+.modal-x{position:absolute;top:14px;right:14px;background:transparent;border:1px solid var(--border);color:var(--muted);width:26px;height:26px;border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .2s;line-height:1;}
+.modal-x:hover{border-color:var(--accent2);color:var(--accent2);}
+.modal{position:relative;}
+.filtro-btn{padding:5px 10px;font-size:10px;font-weight:700;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:'Syne',sans-serif;transition:all .2s;}
+.filtro-btn.active{background:var(--surface2);color:var(--text);border-color:var(--accent);}
+/* TIMELINE */
+.timeline{margin-top:10px;}
+.tl-item{display:flex;gap:10px;margin-bottom:8px;align-items:flex-start;}
+.tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px;}
+.tl-dot.pago{background:var(--accent);}
+.tl-dot.vencido{background:var(--accent2);}
+.tl-dot.futuro{background:var(--border);}
+.tl-dot.parcial{background:var(--accent3);}
+.tl-content{flex:1;}
+.tl-data{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;}
+.tl-valor{font-size:12px;font-weight:700;font-family:'Space Mono',monospace;}
+.tl-status{font-size:9px;color:var(--muted);}
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;align-items:flex-start;justify-content:center;padding:12px;overflow-y:auto;}
+.modal-overlay.open{display:flex;}
+.modal-overlay.open>.modal{pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;width:100%;max-width:520px;margin:auto;}
+.modal h2{font-size:15px;font-weight:800;margin-bottom:14px;color:var(--accent);}
+.modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
+.btn-cancel{background:var(--surface2);color:var(--muted);border:1px solid var(--border);padding:10px;border-radius:6px;font-family:'Syne',sans-serif;font-weight:600;cursor:pointer;font-size:12px;width:100%;}
+/* MSG */
+.tom-tabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap;}
+.tom-tab{padding:4px 10px;font-size:10px;font-weight:700;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:'Syne',sans-serif;transition:all .2s;}
+.tom-tab.active.amigavel{background:#004420;color:var(--accent);border-color:var(--accent);}
+.tom-tab.active.neutro{background:#2a2a00;color:var(--accent3);border-color:var(--accent3);}
+.tom-tab.active.ameaca{background:#2a0010;color:#ff88aa;border-color:var(--accent2);}
+.tom-tab.active.forte{background:#3a0000;color:var(--accent2);border-color:var(--accent2);}
+.msg-tabs{display:flex;gap:4px;margin-bottom:10px;}
+.msg-tab{padding:4px 10px;font-size:10px;font-weight:700;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:'Syne',sans-serif;transition:all .2s;}
+.msg-tab.active{background:var(--accent3);color:#000;border-color:var(--accent3);}
+.msg-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:11px;line-height:1.8;white-space:pre-wrap;min-height:100px;color:var(--text);}
+.btn-copy{background:var(--surface2);color:var(--accent);border:1px solid var(--accent);padding:8px 14px;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;cursor:pointer;width:100%;margin-top:8px;transition:all .2s;}
+.btn-copy:hover{background:var(--accent);color:#000;}
+/* SALDO/RESULT BOX */
+.result-box{background:var(--surface2);border-radius:8px;padding:11px;margin-top:8px;}
+.result-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);font-family:'Space Mono',monospace;}
+.result-row:last-child{border-bottom:none;font-weight:700;font-size:12px;}
+/* HISTÓRICO */
+.hist-item{display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);font-size:11px;}
+.hist-item:last-child{border-bottom:none;}
+.hist-tipo{font-family:'Space Mono',monospace;font-size:9px;padding:2px 5px;border-radius:10px;font-weight:700;display:inline-block;margin-bottom:2px;}
+.hist-pgto{background:#002a15;color:var(--accent);}
+.hist-amort{background:#001a2a;color:var(--accent4);}
+.hist-quit{background:#2a0020;color:#ff88cc;}
+.hist-reparc{background:#1a0a2a;color:var(--accent5);}
+/* PARCELAS CUSTOM */
+.parcela-custom-row{display:grid;grid-template-columns:1fr 1fr 24px;gap:6px;align-items:center;margin-bottom:6px;}
+.parcela-custom-row input{padding:6px 8px;font-size:11px;}
+.btn-add-parc{background:var(--surface3);border:1px dashed var(--border);color:var(--muted);padding:7px;border-radius:6px;font-size:11px;cursor:pointer;width:100%;font-family:'Syne',sans-serif;margin-top:4px;transition:all .2s;}
+.btn-add-parc:hover{border-color:var(--accent);color:var(--accent);}
+/* RELATÓRIO */
+.rel-section{margin-bottom:18px;}
+.rel-title{font-size:11px;font-weight:700;color:var(--accent3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.rel-row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border);}
+.rel-row:last-child{border-bottom:none;}
+.rel-total{display:flex;justify-content:space-between;font-size:14px;font-weight:800;padding:10px;background:var(--surface2);border-radius:8px;margin-top:8px;font-family:'Space Mono',monospace;}
+/* SÓCIO */
+.socio-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;}
+.socio-nome{font-size:15px;font-weight:800;margin-bottom:10px;color:var(--accent5);}
+/* CONFIG */
+.config-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;}
+.config-title{font-size:11px;font-weight:700;color:var(--accent3);text-transform:uppercase;margin-bottom:12px;}
+/* DIAS EXCLUIDOS */
+.dia-tag{display:inline-flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:3px 8px;font-size:10px;font-family:'Space Mono',monospace;margin:2px;}
+.dia-tag button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0;}
+.dia-tag button:hover{color:var(--accent2);}
+@media(max-width:420px){
+  .form-grid{grid-template-columns:1fr;}
+  .summary-cards{grid-template-columns:1fr;}
+  .contrato-info{grid-template-columns:1fr;}
+  .modal-btns{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<h1>💰 Contratos</h1>
+<div class="subtitle">Sistema de Gestão de Empréstimos</div>
+<div class="today-bar">
+  <span class="today" id="todayDisplay"></span>
+  <button onclick="exportarPDF()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:4px;font-size:10px;font-family:'Syne',sans-serif;cursor:pointer;">📄 PDF</button>
+  <button onclick="backupDados()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:4px;font-size:10px;font-family:'Syne',sans-serif;cursor:pointer;">💾 Backup</button>
+  <button onclick="restaurarDados()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:4px;font-size:10px;font-family:'Syne',sans-serif;cursor:pointer;">📂 Restaurar</button>
+  <input type="file" id="inputRestore" accept=".json" style="display:none" onchange="lerBackup(event)">
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('dashboard',this)">📊 Dashboard</button>
+  <button class="tab" onclick="switchTab('novo',this)">+ Novo</button>
+  <button class="tab" onclick="switchTab('relatorio',this)">📈 Relatório</button>
+  <button class="tab" onclick="switchTab('socio',this)">🤝 Sócio</button>
+  <button class="tab" onclick="switchTab('contrato-msg',this)">📋 Contrato</button>
+  <button class="tab" onclick="switchTab('config',this)">⚙️ Config</button>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div class="tab-content active" id="tab-dashboard">
+  <div class="summary-cards">
+    <div class="card"><div class="card-label">Total Carteira</div><div class="card-value green" id="totalCarteira">R$ 0,00</div></div>
+    <div class="card"><div class="card-label">Sua Parte</div><div class="card-value yellow" id="totalSuaParte">R$ 0,00</div></div>
+    <div class="card"><div class="card-label">Vencidos</div><div class="card-value red" id="totalVencidos">R$ 0,00</div></div>
+    <div class="card"><div class="card-label">Vence em 7d</div><div class="card-value blue" id="totalAVencer">R$ 0,00</div></div>
+  </div>
+  <div id="alertasVencimento"></div>
+  <!-- FILTROS -->
+  <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;" id="filtrosBar">
+    <button class="filtro-btn active" data-filtro="todos" onclick="setFiltro('todos',this)">Todos</button>
+    <button class="filtro-btn" data-filtro="vence_hoje" onclick="setFiltro('vence_hoje',this)">📅 Hoje</button>
+    <button class="filtro-btn" data-filtro="atrasado" onclick="setFiltro('atrasado',this)">🔴 Atrasados</button>
+    <button class="filtro-btn" data-filtro="em_dia" onclick="setFiltro('em_dia',this)">✅ Em dia</button>
+    <button class="filtro-btn" data-filtro="vincendo" onclick="setFiltro('vincendo',this)">⏳ Vincendos</button>
+    <button class="filtro-btn" data-filtro="quitado" onclick="setFiltro('quitado',this)">✓ Quitados</button>
+  </div>
+  <div id="listaContratos"></div>
+</div>
+
+<!-- ==================== NOVO CONTRATO ==================== -->
+<div class="tab-content" id="tab-novo">
+  <div class="form-grid">
+    <div class="section-title first">📋 Cliente</div>
+    <div class="form-group full"><label>Nome do Cliente</label><input type="text" id="f_nome" placeholder="Ex: João Silva"></div>
+    <div class="form-group full"><label>Modalidade</label>
+      <select id="f_modalidade" onchange="toggleModalidade('f')">
+        <option value="mensal">Mensal (juros fixo todo mês)</option>
+        <option value="unica">Parcela Única (principal + juros no vencimento)</option>
+        <option value="diario">Diário (juros por dia)</option>
+        <option value="personalizado">Personalizado (parcelas livres)</option>
+      </select>
+    </div>
+
+    <div class="section-title">💰 Valores</div>
+    <div class="form-group"><label>Valor Emprestado (R$)</label><input type="number" id="f_principal" placeholder="0,00" oninput="sugerirParcelas()"></div>
+    <div class="form-group"><label>Data do Empréstimo</label><input type="date" id="f_dataInicio"></div>
+
+    <!-- MENSAL -->
+    <div class="form-group" id="f_bloco_tipoJuros"><label>Tipo de Juros</label>
+      <select id="f_tipoJuros" onchange="toggleJuros('f')">
+        <option value="percentual">Percentual Mensal (%)</option>
+        <option value="fixo">Valor Fixo (R$)</option>
+      </select>
+    </div>
+    <div class="form-group" id="f_bloco_juros"><label id="f_labelJuros">Juros Mensais (%)</label><input type="number" id="f_juros" placeholder="Ex: 20" oninput="sugerirParcelas()"></div>
+    <div class="form-group" id="f_bloco_diaVenc"><label>Dia de Vencimento</label><input type="number" id="f_diaVenc" placeholder="Ex: 9" min="1" max="31"></div>
+    <div class="form-group" id="f_bloco_vencMesVig">
+      <label>Primeiro vencimento</label>
+      <select id="f_vencimentoMesVigente">
+        <option value="nao">Mês seguinte ao da criação (padrão)</option>
+        <option value="sim">Mês vigente (mesmo mês)</option>
+      </select>
+    </div>
+    <div class="form-group" id="f_bloco_parcelas"><label>Nº de Parcelas (0=aberto)</label><input type="number" id="f_parcelas" placeholder="Ex: 6" min="0" oninput="sugerirParcelas()"></div>
+
+    <!-- DIÁRIO -->
+    <div class="form-group hidden" id="f_bloco_jurosDiario"><label>Juros Total sobre o Principal (%)</label><input type="number" id="f_jurosDiario" placeholder="Ex: 30"></div>
+    <div class="form-group hidden" id="f_bloco_carencia"><label>Carência (dias sem juros)</label><input type="number" id="f_carencia" placeholder="Ex: 7" min="0"></div>
+    <div class="form-group hidden" id="f_bloco_prazo"><label>Prazo Total (dias)</label><input type="number" id="f_prazo" placeholder="Ex: 30" min="1"></div>
+    <div class="form-group hidden full" id="f_bloco_diasUteis"><label>Regra FDS/Feriado</label>
+      <select id="f_diasUteis">
+        <option value="nao">Conta todos os dias</option>
+        <option value="proximo">FDS/Feriado → próximo dia útil</option>
+        <option value="anterior">FDS/Feriado → dia útil anterior</option>
+        <option value="semMulta">Conta dias, sem multa em FDS/feriado</option>
+      </select>
+    </div>
+
+    <!-- PERSONALIZADO -->
+    <div class="hidden full" id="f_bloco_personalizado">
+      <div class="section-title" style="border-top:none;padding-top:0;">📅 Parcelas Personalizadas</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div class="form-group">
+          <label>Gerar sugestão automática</label>
+          <select id="f_sugestao_tipo">
+            <option value="igual">Parcelas iguais</option>
+            <option value="juros_fixo">Juros fixo + amortização</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nº de parcelas sugeridas</label>
+          <input type="number" id="f_sugestao_n" placeholder="Ex: 3" min="1">
+        </div>
+      </div>
+      <button class="btn-add-parc" onclick="gerarSugestaoParcelamento()">⚡ Gerar sugestão de parcelamento</button>
+      <div style="margin-top:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 24px;gap:6px;margin-bottom:4px;">
+          <label style="font-size:9px;">DATA</label><label style="font-size:9px;">VALOR (R$)</label><span></span>
+        </div>
+        <div id="f_parcelas_custom"></div>
+        <button class="btn-add-parc" onclick="addParcelaCustom('f')">+ Adicionar parcela</button>
+      </div>
+      <div id="f_resumo_personalizado" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-title">⚠️ Multas e Exceções</div>
+    <div class="form-group"><label>Multa por Dia de Atraso (R$)</label><input type="number" id="f_multa" placeholder="Ex: 30"></div>
+    <div class="form-group"><label>Multa Fixa por Atraso (R$)</label><input type="number" id="f_multaFixa" placeholder="Ex: 0"></div>
+    <div class="form-group full"><label>Dias da semana sem juros/multa</label>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;" id="f_diasSemana">
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="0" style="width:auto;padding:0;"> Dom</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="1" style="width:auto;padding:0;"> Seg</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="2" style="width:auto;padding:0;"> Ter</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="3" style="width:auto;padding:0;"> Qua</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="4" style="width:auto;padding:0;"> Qui</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="5" style="width:auto;padding:0;"> Sex</label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:10px;text-transform:none;letter-spacing:0;" onclick="event.stopPropagation()"><input type="checkbox" value="6" style="width:auto;padding:0;"> Sáb</label>
+      </div>
+    </div>
+    <div class="form-group full"><label>Datas específicas sem juros/multa (dd/mm)</label>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="f_dataExcInput" placeholder="Ex: 25/12" style="flex:1;">
+        <button onclick="addDataExc('f')" style="background:var(--surface3);border:1px solid var(--border);color:var(--accent);padding:0 12px;border-radius:6px;cursor:pointer;font-size:14px;">+</button>
+      </div>
+      <div id="f_datasExcluidas" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="section-title">💬 Mensagens</div>
+    <div class="form-group full"><label>Tom padrão das mensagens</label>
+      <select id="f_tomPadrao">
+        <option value="neutro">Neutro</option>
+        <option value="amigavel">Amigável</option>
+        <option value="ameaca">Levemente Ameaçador</option>
+        <option value="forte">Ameaçador</option>
+      </select>
+    </div>
+
+    <div class="section-title">🤝 Sociedade</div>
+    <div class="form-group full"><label>Sociedade?</label>
+      <select id="f_sociedade" onchange="toggleSociedade('f')">
+        <option value="nao">Não — 100% meu</option>
+        <option value="sim">Sim — divido com sócio</option>
+      </select>
+    </div>
+    <div class="form-group hidden" id="f_sociedadeRow"><label>Sócio</label>
+      <select id="f_socioId" onchange="preencherPctSocio('f')"><option value="">— Selecione —</option></select>
+    </div>
+    <div class="form-group hidden" id="f_sociedadePct"><label>Minha % no contrato</label><input type="number" id="f_minhaPct" placeholder="Ex: 50" min="1" max="99" oninput="calcSocio('f')"></div>
+    <div class="form-group hidden" id="f_sociedadeRowSocio"><label>% do Sócio</label><input type="number" id="f_socioPct" readonly></div>
+
+    <div class="form-group full"><label>Observações</label><input type="text" id="f_obs" placeholder="Opcional"></div>
+  </div>
+  <button class="btn-primary" onclick="salvarContrato()">Salvar Contrato</button>
+</div>
+
+<!-- ==================== RELATÓRIO ==================== -->
+<div class="tab-content" id="tab-relatorio">
+  <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">
+    <select id="rel_mes" style="flex:1;" onchange="renderRelatorio()"></select>
+    <select id="rel_ano" style="flex:1;" onchange="renderRelatorio()"></select>
+  </div>
+  <div id="relatorio_content"></div>
+</div>
+
+<!-- ==================== SÓCIO ==================== -->
+<div class="tab-content" id="tab-socio">
+  <div id="socio_content"></div>
+</div>
+
+<!-- ==================== MENSAGEM CONTRATO ==================== -->
+<div class="tab-content" id="tab-contrato-msg">
+  <p style="font-size:11px;color:var(--muted);margin-bottom:10px;">Selecione um contrato para gerar o documento de formalização:</p>
+  <select id="sel_contrato_msg" onchange="gerarMsgContrato()" style="margin-bottom:11px;"><option value="">— Selecione —</option></select>
+  <div id="contrato_msg_output" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'Space Mono',monospace;font-size:11px;line-height:1.8;white-space:pre-wrap;color:var(--text);"></div>
+  <button class="btn-copy" id="btn_copy_contrato" style="display:none;" onclick="copiarContrato()">📋 Copiar mensagem</button>
+</div>
+
+<!-- ==================== CONFIG ==================== -->
+<div class="tab-content" id="tab-config">
+  <div class="config-section">
+    <div class="config-title">👤 Dados do Credor</div>
+    <div class="form-grid">
+      <div class="form-group full"><label>Seu Nome / Nome da Empresa</label><input type="text" id="cfg_nome" placeholder="Ex: João Empréstimos"></div>
+      <div class="form-group"><label>Chave Pix</label><input type="text" id="cfg_pix" placeholder="CPF, email ou chave"></div>
+      <div class="form-group"><label>Tipo da Chave Pix</label>
+        <select id="cfg_pixTipo">
+          <option value="CPF">CPF</option><option value="CNPJ">CNPJ</option>
+          <option value="Email">Email</option><option value="Celular">Celular</option>
+          <option value="Aleatória">Chave Aleatória</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="cfg_tel" placeholder="Ex: (11) 99999-9999"></div>
+      <div class="form-group full"><label>Observação padrão nos contratos</label><textarea id="cfg_obs" placeholder="Ex: Empréstimo sujeito a juros conforme acordado."></textarea></div>
+    </div>
+    <button class="btn-primary" onclick="salvarConfig()">Salvar Configurações</button>
+  </div>
+  <div class="config-section">
+    <div class="config-title">🤝 Sócios Cadastrados</div>
+    <div id="socios_lista" style="margin-bottom:12px;"></div>
+    <div class="form-grid" style="margin-bottom:10px;">
+      <div class="form-group"><label>Nome do Sócio</label><input type="text" id="socio_nome" placeholder="Ex: Carlos"></div>
+      <div class="form-group"><label>Telefone (opcional)</label><input type="text" id="socio_tel" placeholder="(11) 99999-9999"></div>
+    </div>
+    <button class="btn-primary" onclick="adicionarSocio()" style="margin-bottom:0;">Adicionar Sócio</button>
+  </div>
+  <div class="config-section">
+    <div class="config-title">🗑️ Dados</div>
+    <button class="btn-danger" onclick="limparTudo()">Apagar todos os dados</button>
+  </div>
+</div>
+
+<!-- ==================== MODAIS ==================== -->
+
+<!-- MODAL EDITAR -->
+<div class="modal-overlay" id="modalEdit" onclick="closeOnOverlay(event,'modalEdit')">
+  <div class="modal">
+    <h2>✏️ Editar Contrato</h2>
+    <button class="modal-x" onclick="closeModal('modalEdit')" title="Fechar">✕</button>
+    <div class="form-grid">
+      <div class="form-group full"><label>Nome</label><input type="text" id="e_nome"></div>
+      <div class="form-group full"><label>Modalidade</label>
+        <select id="e_modalidade" onchange="toggleModalidade('e')">
+          <option value="mensal">Mensal</option><option value="unica">Parcela Única</option><option value="diario">Diário</option><option value="personalizado">Personalizado</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Principal (R$)</label><input type="number" id="e_principal"></div>
+      <div class="form-group"><label>Data Início</label><input type="date" id="e_dataInicio"></div>
+      <div class="form-group" id="e_bloco_tipoJuros"><label>Tipo Juros</label>
+        <select id="e_tipoJuros" onchange="toggleJuros('e')"><option value="percentual">Percentual (%)</option><option value="fixo">Valor Fixo (R$)</option></select>
+      </div>
+      <div class="form-group" id="e_bloco_juros"><label id="e_labelJuros">Juros</label><input type="number" id="e_juros"></div>
+      <div class="form-group" id="e_bloco_diaVenc"><label>Dia Vencimento</label><input type="number" id="e_diaVenc"></div>
+      <div class="form-group" id="e_bloco_vencMesVig"><label>Primeiro vencimento</label>
+        <select id="e_vencimentoMesVigente">
+          <option value="nao">Mês seguinte (padrão)</option>
+          <option value="sim">Mês vigente</option>
+        </select>
+      </div>
+      <div class="form-group" id="e_bloco_parcelas"><label>Nº Parcelas</label><input type="number" id="e_parcelas"></div>
+      <div class="form-group hidden" id="e_bloco_jurosDiario"><label>Juros Total (%)</label><input type="number" id="e_jurosDiario"></div>
+      <div class="form-group hidden" id="e_bloco_carencia"><label>Carência (dias)</label><input type="number" id="e_carencia"></div>
+      <div class="form-group hidden" id="e_bloco_prazo"><label>Prazo (dias)</label><input type="number" id="e_prazo"></div>
+      <div class="form-group hidden full" id="e_bloco_diasUteis"><label>Regra FDS/Feriado</label>
+        <select id="e_diasUteis">
+          <option value="nao">Todos os dias</option><option value="proximo">→ próx. dia útil</option>
+          <option value="anterior">→ dia útil anterior</option><option value="semMulta">Sem multa FDS/feriado</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Multa/dia (R$)</label><input type="number" id="e_multa"></div>
+      <div class="form-group"><label>Multa Fixa (R$)</label><input type="number" id="e_multaFixa"></div>
+      <div class="form-group full"><label>Tom padrão</label>
+        <select id="e_tomPadrao">
+          <option value="neutro">Neutro</option><option value="amigavel">Amigável</option>
+          <option value="ameaca">Levemente Ameaçador</option><option value="forte">Ameaçador</option>
+        </select>
+      </div>
+      <div class="form-group full"><label>Sociedade?</label>
+        <select id="e_sociedade" onchange="toggleSociedade('e')"><option value="nao">Não</option><option value="sim">Sim</option></select>
+      </div>
+      <div class="form-group hidden" id="e_sociedadeRow"><label>Sócio</label>
+        <select id="e_socioId"><option value="">— Selecione —</option></select>
+      </div>
+      <div class="form-group hidden" id="e_sociedadePct"><label>Minha %</label><input type="number" id="e_minhaPct" oninput="calcSocio('e')"></div>
+      <div class="form-group hidden" id="e_sociedadeRowSocio"><label>% Sócio</label><input type="number" id="e_socioPct" readonly></div>
+      <div class="form-group full"><label>Observações</label><input type="text" id="e_obs"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modalEdit')">Cancelar</button>
+      <button class="btn-primary" onclick="atualizarContrato()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PAGAMENTO -->
+<div class="modal-overlay" id="modalPagamento" onclick="closeOnOverlay(event,'modalPagamento')">
+  <div class="modal">
+    <h2 id="pg_titulo">💵 Registrar Pagamento</h2>
+    <button class="modal-x" onclick="closeModal('modalPagamento')" title="Fechar">✕</button>
+    <div class="form-grid">
+      <div class="form-group full"><label>Tipo</label>
+        <select id="pg_tipo" onchange="atualizarTipoPagamento()">
+          <option value="juros">Pagamento de Juros (renova principal)</option>
+          <option value="quitacao_total_unica">Quitação Total (principal + juros)</option>
+          <option value="amortizacao">Amortização (abate no principal)</option>
+          <option value="quitacao">Quitação Total</option>
+          <option value="reparcelamento">Reparcelamento</option>
+        </select>
+      </div>
+      <div id="pg_aviso_unica" style="display:none;background:#1a1000;border:1px solid var(--accent3);border-radius:6px;padding:10px;font-size:11px;color:var(--accent3);grid-column:1/-1;"></div>
+      <div class="form-group"><label>Valor Pago (R$)</label><input type="number" id="pg_valor" placeholder="0,00"></div>
+      <div class="form-group"><label>Data do Pagamento</label><input type="date" id="pg_data"></div>
+      <div class="form-group full" id="pg_ref_box" style="display:none;">
+        <label>Parcela de referência</label>
+        <select id="pg_ref_mes"><option value="">— Selecione a parcela —</option></select>
+      </div>
+      <div class="form-group full"><label>Observação</label><input type="text" id="pg_obs" placeholder="Opcional"></div>
+    </div>
+    <div id="pg_saldo_preview" class="result-box" style="display:none;"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modalPagamento')">Cancelar</button>
+      <button class="btn-primary" onclick="registrarPagamento()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ANTECIPAÇÃO -->
+<div class="modal-overlay" id="modalAntecipacao" onclick="closeOnOverlay(event,'modalAntecipacao')">
+  <div class="modal">
+    <h2 id="ant_titulo">⚡ Antecipação</h2>
+    <button class="modal-x" onclick="closeModal('modalAntecipacao')" title="Fechar">✕</button>
+    <div class="form-grid">
+      <div class="form-group full"><label>Saldo Total Atual</label><input type="number" id="ant_saldo" readonly style="color:var(--accent3);"></div>
+      <div class="form-group"><label>Desconto (%)</label><input type="number" id="ant_desconto" placeholder="Ex: 10" oninput="calcAntecipacao()"></div>
+      <div class="form-group"><label>Tipo</label>
+        <select id="ant_tipo" onchange="calcAntecipacao()">
+          <option value="quitacao">Quitação Total</option>
+          <option value="amortizacao">Amortização Parcial</option>
+        </select>
+      </div>
+      <div class="form-group hidden full" id="ant_bloco_valor"><label>Valor a Amortizar (R$)</label><input type="number" id="ant_valor" placeholder="0,00" oninput="calcAntecipacao()"></div>
+    </div>
+    <div id="ant_resultado" class="result-box" style="display:none;"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modalAntecipacao')">Fechar</button>
+      <button class="btn-primary" onclick="confirmarAntecipacao()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO / EVOLUÇÃO -->
+<div class="modal-overlay" id="modalHistorico" onclick="closeOnOverlay(event,'modalHistorico')">
+  <div class="modal">
+    <h2 id="hist_titulo">📜 Histórico</h2>
+    <button class="modal-x" onclick="closeModal('modalHistorico')" title="Fechar">✕</button>
+    <div id="hist_saldo" class="result-box" style="margin-bottom:12px;"></div>
+    <p style="font-size:10px;font-weight:700;color:var(--accent3);text-transform:uppercase;margin-bottom:8px;">EVOLUÇÃO DA DÍVIDA</p>
+    <div id="hist_timeline" class="timeline" style="margin-bottom:14px;"></div>
+    <p style="font-size:10px;font-weight:700;color:var(--accent3);text-transform:uppercase;margin-bottom:8px;">PAGAMENTOS REGISTRADOS</p>
+    <div id="hist_lista"></div>
+    <button class="btn-cancel" style="margin-top:12px;" onclick="closeModal('modalHistorico')">Fechar</button>
+  </div>
+</div>
+
+<!-- MODAL MENSAGENS -->
+<div class="modal-overlay" id="modalMsg" onclick="closeOnOverlay(event,'modalMsg')">
+  <div class="modal">
+    <h2>📱 Mensagens de Cobrança</h2>
+    <button class="modal-x" onclick="closeModal('modalMsg')" title="Fechar">✕</button>
+    <p style="font-size:10px;color:var(--muted);margin-bottom:6px;">TOM</p>
+    <div class="tom-tabs">
+      <button class="tom-tab amigavel" onclick="switchTom('amigavel',this)">😊 Amigável</button>
+      <button class="tom-tab neutro" onclick="switchTom('neutro',this)">😐 Neutro</button>
+      <button class="tom-tab ameaca" onclick="switchTom('ameaca',this)">😤 Ameaçador</button>
+      <button class="tom-tab forte" onclick="switchTom('forte',this)">😡 Forte</button>
+    </div>
+    <p style="font-size:10px;color:var(--muted);margin-bottom:6px;margin-top:8px;">VERSÃO</p>
+    <div class="msg-tabs">
+      <button class="msg-tab active" onclick="switchMsg(0,this)">Breve</button>
+      <button class="msg-tab" onclick="switchMsg(1,this)">Objetiva</button>
+      <button class="msg-tab" onclick="switchMsg(2,this)">Direta</button>
+    </div>
+    <div class="msg-box" id="msgBox"></div>
+    <button class="btn-copy" onclick="copiarMsg()">📋 Copiar para WhatsApp</button>
+    <button class="btn-cancel" style="margin-top:7px;" onclick="closeModal('modalMsg')">Fechar</button>
+  </div>
+</div>
+
+<!-- MODAL RENOVAÇÃO -->
+<div class="modal-overlay" id="modalRenovacao" onclick="closeOnOverlay(event,'modalRenovacao')">
+  <div class="modal">
+    <h2 id="ren_titulo">🔄 Renovar Contrato</h2>
+    <button class="modal-x" onclick="closeModal('modalRenovacao')" title="Fechar">✕</button>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:12px;">Confirme os dados para o novo ciclo. Os dados do contrato atual serão copiados.</p>
+    <div class="form-grid">
+      <div class="form-group"><label>Novo Valor (R$)</label><input type="number" id="ren_principal" placeholder="0,00"></div>
+      <div class="form-group"><label>Nova Data Início</label><input type="date" id="ren_dataInicio"></div>
+      <div class="form-group full"><label>Observação</label><input type="text" id="ren_obs" placeholder="Ex: Renovação Mai/25"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modalRenovacao')">Cancelar</button>
+      <button class="btn-primary" onclick="confirmarRenovacao()">Renovar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REMODELAGEM -->
+<div class="modal-overlay" id="modalRemodelagem" onclick="closeOnOverlay(event,'modalRemodelagem')">
+  <div class="modal">
+    <h2 id="rem_titulo">📝 Remodelar Contrato</h2>
+    <button class="modal-x" onclick="closeModal('modalRemodelagem')" title="Fechar">✕</button>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:12px;">As condições anteriores serão arquivadas com o histórico de pagamentos. O novo ciclo começa a partir da data informada.</p>
+    <div class="form-grid">
+      <div class="form-group full"><label>Data de início da nova versão</label><input type="date" id="rem_dataInicio"></div>
+      <div class="form-group full"><label>Motivo da remodelagem</label><input type="text" id="rem_motivo" placeholder="Ex: Renegociação Mai/25"></div>
+
+      <div class="section-title first">💰 Novos Valores</div>
+      <div class="form-group"><label>Novo Principal (R$)</label><input type="number" id="rem_principal" placeholder="0,00"></div>
+      <div class="form-group"><label>Modalidade</label>
+        <select id="rem_modalidade" onchange="toggleModalidade('rem')">
+          <option value="mensal">Mensal</option>
+          <option value="diario">Diário</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="rem_bloco_tipoJuros"><label>Tipo de Juros</label>
+        <select id="rem_tipoJuros" onchange="toggleJuros('rem')">
+          <option value="percentual">Percentual (%)</option>
+          <option value="fixo">Valor Fixo (R$)</option>
+        </select>
+      </div>
+      <div class="form-group" id="rem_bloco_juros"><label id="rem_labelJuros">Juros (%)</label><input type="number" id="rem_juros"></div>
+      <div class="form-group" id="rem_bloco_diaVenc"><label>Dia de Vencimento</label><input type="number" id="rem_diaVenc" min="1" max="31"></div>
+      <div class="form-group" id="rem_bloco_parcelas"><label>Nº de Parcelas (0=aberto)</label><input type="number" id="rem_parcelas"></div>
+
+      <div class="form-group hidden" id="rem_bloco_jurosDiario"><label>Juros Diários (%)</label><input type="number" id="rem_jurosDiario"></div>
+      <div class="form-group hidden" id="rem_bloco_carencia"><label>Carência (dias)</label><input type="number" id="rem_carencia"></div>
+      <div class="form-group hidden" id="rem_bloco_prazo"><label>Prazo Total (dias)</label><input type="number" id="rem_prazo"></div>
+      <div class="form-group hidden full" id="rem_bloco_diasUteis"><label>Regra FDS/Feriado</label>
+        <select id="rem_diasUteis">
+          <option value="nao">Todos os dias</option>
+          <option value="proximo">→ próx. dia útil</option>
+          <option value="anterior">→ dia útil anterior</option>
+          <option value="semMulta">Sem multa FDS/feriado</option>
+        </select>
+      </div>
+
+      <!-- PERSONALIZADO dentro da remodelagem -->
+      <div class="hidden full" id="rem_bloco_personalizado" style="grid-column:1/-1;">
+        <div class="section-title">📅 Parcelas Personalizadas</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="form-group">
+            <label>Tipo de sugestão</label>
+            <select id="rem_sugestao_tipo">
+              <option value="igual">Parcelas iguais</option>
+              <option value="juros_fixo">Juros fixo + amortização</option>
+              <option value="livre">Definir manualmente</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nº de parcelas</label>
+            <input type="number" id="rem_sugestao_n" placeholder="Ex: 3" min="1">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="form-group">
+            <label>Juros total sobre o valor (%)</label>
+            <input type="number" id="rem_sugestao_juros" placeholder="Ex: 20">
+          </div>
+          <div class="form-group">
+            <label>Primeiro vencimento</label>
+            <input type="date" id="rem_sugestao_dataBase">
+          </div>
+        </div>
+        <button class="btn-add-parc" onclick="gerarSugestaoRem()">⚡ Gerar sugestão de parcelamento</button>
+        <div style="margin-top:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 24px;gap:6px;margin-bottom:4px;">
+            <label style="font-size:9px;">DATA</label>
+            <label style="font-size:9px;">VALOR (R$)</label>
+            <span></span>
+          </div>
+          <div id="rem_parcelas_custom"></div>
+          <button class="btn-add-parc" onclick="addParcelaRem()">+ Adicionar parcela</button>
+        </div>
+        <div id="rem_resumo_personalizado" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="section-title">⚠️ Multas</div>
+      <div class="form-group"><label>Multa/dia (R$)</label><input type="number" id="rem_multa"></div>
+      <div class="form-group"><label>Multa Fixa (R$)</label><input type="number" id="rem_multaFixa"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modalRemodelagem')">Cancelar</button>
+      <button class="btn-primary" onclick="confirmarRemodelagem()">Confirmar Remodelagem</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+const SUPA_URL = 'https://vltlukeywixguynhxhxo.supabase.co';
+const SUPA_KEY = 'sb_publishable_AWE56dozQCfJeUhl9Z4iRQ_Ygd53P7M';
+
+async function supaFetch(path, method='GET', body=null){
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method==='POST'?'return=representation':'',
+    }
+  };
+  if(body) opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch(SUPA_URL + '/rest/v1/' + path, opts);
+    const txt = await r.text();
+    if(!r.ok) throw new Error(txt);
+    return txt ? JSON.parse(txt) : null;
+  } catch(e) {
+    throw e;
+  }
+}
+
+// Estado global
+let contratos = [];
+let pagamentos = {};
+let config = {};
+let socios = [];
+let dadosCarregados = false;
+let editIndex=-1, msgIdx=-1, antIdx=-1, histIdx=-1, renIdx=-1;
+let tomAtual='neutro', versaoAtual=0, msgsCache={};
+
+const today=new Date(); today.setHours(0,0,0,0);
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEMANA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const FERIADOS=[[1,1],[4,21],[5,1],[9,7],[10,12],[11,2],[11,15],[12,25]];
+
+document.getElementById('todayDisplay').textContent='Hoje: '+today.toLocaleDateString('pt-BR');
+document.getElementById('f_dataInicio').value=today.toISOString().split('T')[0];
+document.getElementById('pg_data').value=today.toISOString().split('T')[0];
+
+// Preencher selects de mês/ano
+(function(){
+  const ms=document.getElementById('rel_mes');
+  const as=document.getElementById('rel_ano');
+  MESES.forEach((m,i)=>{
+    const o=document.createElement('option');
+    o.value=i; o.textContent=m;
+    if(i===today.getMonth()) o.selected=true;
+    ms.appendChild(o);
+  });
+  for(let y=today.getFullYear()-2;y<=today.getFullYear()+1;y++){
+    const o=document.createElement('option');
+    o.value=y; o.textContent=y;
+    if(y===today.getFullYear()) o.selected=true;
+    as.appendChild(o);
+  }
+})();
+
+// Carregar config
+function carregarConfig(){
+  if(config.nome) document.getElementById('cfg_nome').value=config.nome;
+  if(config.pix) document.getElementById('cfg_pix').value=config.pix;
+  if(config.pixTipo) document.getElementById('cfg_pixTipo').value=config.pixTipo;
+  if(config.tel) document.getElementById('cfg_tel').value=config.tel;
+  if(config.obs) document.getElementById('cfg_obs').value=config.obs;
+}
+// Config e sócios são carregados após carregarDados()
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(v){return 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDate(d){return new Date(d+'T00:00:00').toLocaleDateString('pt-BR');}
+function diasEntre(d1,d2){return Math.floor((d2-d1)/864e5);}
+function isFeriado(d){return FERIADOS.some(([m,dia])=>d.getMonth()===m&&d.getDate()===dia);}
+function isFDS(d){return d.getDay()===0||d.getDay()===6;}
+function isExcluido(d,c){
+  const diaSemana=d.getDay();
+  if(c.diasSemanaExc&&c.diasSemanaExc.includes(String(diaSemana))) return true;
+  if(c.datasExc){
+    const dd=String(d.getDate()).padStart(2,'0');
+    const mm=String(d.getMonth()+1).padStart(2,'0');
+    if(c.datasExc.includes(dd+'/'+mm)) return true;
+  }
+  return false;
+}
+function proxDiaUtil(d){const r=new Date(d);while(isFDS(r)||isFeriado(r))r.setDate(r.getDate()+1);return r;}
+function diaUtilAnterior(d){const r=new Date(d);while(isFDS(r)||isFeriado(r))r.setDate(r.getDate()-1);return r;}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tab,el){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  el.classList.add('active');
+  if(tab==='contrato-msg') popularSelectContrato();
+  if(tab==='relatorio') renderRelatorio();
+  if(tab==='socio') renderSocio();
+  if(tab==='config') renderSociosCadastro();
+}
+
+// ============================================================
+// FORM TOGGLES
+// ============================================================
+function toggleModalidade(p){
+  const m=document.getElementById(p+'_modalidade').value;
+  const mensal=['tipoJuros','juros','diaVenc','parcelas'];
+  const diario=['jurosDiario','carencia','prazo','diasUteis'];
+  // Mensal e parcela única compartilham campos de juros e dia de vencimento
+  const isMensalLike=m==='mensal'||m==='unica';
+  mensal.forEach(b=>{const el=document.getElementById(p+'_bloco_'+b);if(el)el.classList.toggle('hidden',!isMensalLike);});
+  diario.forEach(b=>{const el=document.getElementById(p+'_bloco_'+b);if(el)el.classList.toggle('hidden',m!=='diario');});
+  const blocoP=document.getElementById(p+'_bloco_personalizado');
+  if(blocoP) blocoP.classList.toggle('hidden',m!=='personalizado');
+  // Ocultar nº parcelas para parcela única
+  const blocoParc=document.getElementById(p+'_bloco_parcelas');
+  if(blocoParc) blocoParc.classList.toggle('hidden',m==='unica'||m==='diario'||m==='personalizado');
+}
+function toggleJuros(p){
+  const t=document.getElementById(p+'_tipoJuros').value;
+  document.getElementById(p+'_labelJuros').textContent=t==='percentual'?'Juros Mensais (%)':'Juros Fixos (R$)';
+}
+function toggleSociedade(p){
+  const v=document.getElementById(p+'_sociedade').value;
+  document.getElementById(p+'_sociedadeRow').classList.toggle('hidden',v!=='sim');
+  document.getElementById(p+'_sociedadeRowSocio').classList.toggle('hidden',v!=='sim');
+  const pctRow=document.getElementById(p+'_sociedadePct');
+  if(pctRow) pctRow.classList.toggle('hidden',v!=='sim');
+  // Popular select de sócios
+  if(v==='sim'){
+    const sel=document.getElementById(p+'_socioId');
+    if(sel){
+      sel.innerHTML='<option value="">— Selecione —</option>';
+      socios.forEach((s,si)=>sel.innerHTML+=`<option value="${si}">${s.nome}</option>`);
+    }
+  }
+}
+
+function preencherPctSocio(p){
+  const sel=document.getElementById(p+'_socioId');
+  if(!sel) return;
+  const si=parseInt(sel.value);
+  if(isNaN(si)) return;
+  // Sugerir 50/50 por padrão
+  const minhaPct=document.getElementById(p+'_minhaPct');
+  const socioPct=document.getElementById(p+'_socioPct');
+  if(minhaPct&&!minhaPct.value){ minhaPct.value='50'; if(socioPct) socioPct.value='50'; }
+}
+function calcSocio(p){
+  const v=parseFloat(document.getElementById(p+'_minhaPct').value)||0;
+  document.getElementById(p+'_socioPct').value=Math.max(0,100-v);
+}
+
+// ============================================================
+// DIAS EXCLUÍDOS
+// ============================================================
+let datasExcluidas_f=[];
+function addDataExc(p){
+  const inp=document.getElementById(p+'_dataExcInput');
+  const val=inp.value.trim();
+  if(!val||!/^\d{2}\/\d{2}$/.test(val)){alert('Formato: dd/mm');return;}
+  if(!datasExcluidas_f.includes(val)) datasExcluidas_f.push(val);
+  inp.value='';
+  renderDatasExc(p);
+}
+function remDataExc(p,v){
+  datasExcluidas_f=datasExcluidas_f.filter(x=>x!==v);
+  renderDatasExc(p);
+}
+function renderDatasExc(p){
+  const cont=document.getElementById(p+'_datasExcluidas');
+  cont.innerHTML=datasExcluidas_f.map(v=>`<span class="dia-tag">${v}<button onclick="remDataExc('${p}','${v}')">✕</button></span>`).join('');
+}
+function getDiasSemanaExc(p){
+  const cbs=document.querySelectorAll('#'+p+'_diasSemana input[type=checkbox]:checked');
+  return Array.from(cbs).map(cb=>cb.value);
+}
+
+// ============================================================
+// PARCELAS PERSONALIZADAS
+// ============================================================
+let parcelasCustom_f=[];
+function addParcelaCustom(p){
+  parcelasCustom_f.push({data:'',valor:''});
+  renderParcelasCustom(p);
+}
+function remParcelaCustom(p,i){
+  parcelasCustom_f.splice(i,1);
+  renderParcelasCustom(p);
+}
+function renderParcelasCustom(p){
+  const cont=document.getElementById(p+'_parcelas_custom');
+  cont.innerHTML=parcelasCustom_f.map((pc,i)=>`
+    <div class="parcela-custom-row">
+      <input type="date" value="${pc.data}" oninput="parcelasCustom_f[${i}].data=this.value;atualizarResumoPersonalizado()">
+      <input type="number" placeholder="R$" value="${pc.valor}" oninput="parcelasCustom_f[${i}].valor=this.value;atualizarResumoPersonalizado()">
+      <button onclick="remParcelaCustom('f',${i})" style="background:none;border:none;color:var(--accent2);cursor:pointer;font-size:14px;">✕</button>
+    </div>`).join('');
+  atualizarResumoPersonalizado();
+}
+function gerarSugestaoParcelamento(){
+  const principal=parseFloat(document.getElementById('f_principal').value)||0;
+  const n=parseInt(document.getElementById('f_sugestao_n').value)||3;
+  const tipo=document.getElementById('f_sugestao_tipo').value;
+  const dataBase=new Date(document.getElementById('f_dataInicio').value+'T00:00:00')||today;
+  if(!principal){alert('Informe o valor emprestado.');return;}
+  parcelasCustom_f=[];
+  for(let i=0;i<n;i++){
+    const d=new Date(dataBase);
+    d.setMonth(d.getMonth()+i+1);
+    let valor=0;
+    if(tipo==='igual') valor=(principal/n).toFixed(2);
+    else valor=(principal*0.2).toFixed(2); // juros fixo sugerido
+    parcelasCustom_f.push({data:d.toISOString().split('T')[0],valor:String(valor)});
+  }
+  renderParcelasCustom('f');
+}
+function sugerirParcelas(){
+  if(document.getElementById('f_modalidade').value==='personalizado') gerarSugestaoParcelamento();
+}
+function atualizarResumoPersonalizado(){
+  const total=parcelasCustom_f.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+  const principal=parseFloat(document.getElementById('f_principal').value)||0;
+  const res=document.getElementById('f_resumo_personalizado');
+  if(!parcelasCustom_f.length){res.innerHTML='';return;}
+  res.innerHTML=`<div class="result-box">
+    <div class="result-row"><span>Nº de parcelas</span><span>${parcelasCustom_f.length}</span></div>
+    <div class="result-row"><span>Total a receber</span><span style="color:var(--accent)">${fmt(total)}</span></div>
+    <div class="result-row"><span>Juros total</span><span style="color:var(--accent3)">${fmt(total-principal)}</span></div>
+  </div>`;
+}
+
+// ============================================================
+// CÁLCULO
+// ============================================================
+function getPgs(i){return pagamentos[i]||[];}
+function getSaldoPrincipal(i){
+  const c=contratos[i];
+  const principal=parseFloat(c.principal)||0;
+  let amort=0;
+  getPgs(i).forEach(p=>{
+    if(p.tipo==='amortizacao') amort+=parseFloat(p.valor)||0;
+    if(p.tipo==='quitacao') amort=principal;
+  });
+  return Math.max(0,principal-amort);
+}
+function isQuitado(i){
+  return getPgs(i).some(p=>p.tipo==='quitacao');
+}
+function getStatusDivida(i){
+  const pgs=getPgs(i);
+  if(pgs.some(p=>p.tipo==='quitacao')) return 'quitado';
+  if(pgs.some(p=>p.tipo==='reparcelamento')) return 'reparcelado';
+  if(pgs.some(p=>p.tipo==='amortizacao')) return 'parcial';
+  if(pgs.length>0) return 'em_dia';
+  return 'aberto';
+}
+
+function calcContrato(i){
+  const c=contratos[i];
+  const principal=parseFloat(c.principal)||0;
+  const sp=getSaldoPrincipal(i);
+  const multa=parseFloat(c.multa)||0;
+  const multaFixa=parseFloat(c.multaFixa)||0;
+  const minhaPct=c.sociedade==='sim'?(parseFloat(c.minhaPct)||50):100;
+
+  if(c.modalidade==='unica'){
+    // Parcela única: principal + juros no vencimento
+    const tj=c.tipoJuros||'percentual';
+    const jv=parseFloat(c.juros)||0;
+    const jm=tj==='percentual'?principal*(jv/100):jv;
+    const totalDevido=principal+jm; // O que deve ser pago
+    const dv2=parseInt(c.diaVenc)||9;
+    // Verificar pagamentos
+    const pgQuit=pgs.some(p=>p.tipo==='quitacao');
+    const pgJurosMes=pgs.filter(p=>p.tipo==='juros');
+    // Contar meses consecutivos que só pagou juros (sem principal)
+    const mesesSoJuros=pgJurosMes.length;
+    const alertaPenhora=mesesSoJuros>=4;
+    // Vencimento atual
+    let venc=new Date(today.getFullYear(),today.getMonth(),dv2);
+    if(venc>today) venc=new Date(today.getFullYear(),today.getMonth()-1,dv2);
+    let pv=new Date(today.getFullYear(),today.getMonth(),dv2);
+    if(pv<=today) pv=new Date(today.getFullYear(),today.getMonth()+1,dv2);
+    // Pagou juros esse mês?
+    const pagouJurosMes=pgs.some(pg=>{
+      if(pg.tipo!=='juros') return false;
+      const pd=new Date(pg.data+'T00:00:00');
+      return (pd.getMonth()===venc.getMonth()&&pd.getFullYear()===venc.getFullYear())||
+             (pd.getMonth()===today.getMonth()&&pd.getFullYear()===today.getFullYear());
+    });
+    let atrasado=false,da=0,mt=0;
+    if(!pgQuit&&!pagouJurosMes){
+      da=diasEntre(venc,today);
+      atrasado=da>0;
+      mt=atrasado?(parseFloat(c.multaFixa)||0)+da*(parseFloat(c.multa)||0):0;
+    }
+    // Vencimento hoje
+    const venceHoje2=venc.getTime()===today.getTime()&&!pagouJurosMes&&!pgQuit;
+    if(pagouJurosMes){venc=pv;pv=new Date(pv.getFullYear(),pv.getMonth()+1,dv2);}
+    return {
+      modalidade:'unica',principal,saldoPrincipal:principal,jurosMensais:jm,
+      totalDevido,totalParcela:atrasado?jm+mt:jm,totalQuitacao:totalDevido,
+      atrasado,diasAtraso:da,multaTotal:mt,
+      suaParte:(atrasado?jm+mt:jm)*(minhaPct/100),minhaPct,
+      venc,proxVenc:pv,venceHoje:venceHoje2?venc:null,
+      mesesSoJuros,alertaPenhora,pagouJurosMes
+    };
+  }
+
+  if(c.modalidade==='personalizado'){
+    const parcelas=c.parcelasCustom||[];
+    let proxVenc=null,totalVenc=0,pago=0,atrasado=false,diasAtraso=0;
+    const pgs=getPgs(i);
+    const totalPago=pgs.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+    const totalContrato=parcelas.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+    const saldo=Math.max(0,totalContrato-totalPago);
+    // encontra próx parcela não paga
+    for(const p of parcelas){
+      const d=new Date(p.data+'T00:00:00');
+      if(d>=today){proxVenc=d;totalVenc=parseFloat(p.valor)||0;break;}
+      if(d<today){atrasado=true;diasAtraso=diasEntre(d,today);totalVenc=parseFloat(p.valor)||0;proxVenc=d;}
+    }
+    const multaT=atrasado?(multaFixa+diasAtraso*multa):0;
+    return {
+      modalidade:'personalizado',principal,saldoPrincipal:saldo,atrasado,diasAtraso,
+      multaTotal:multaT,totalParcela:(totalVenc||0)+multaT,totalContrato,totalPago,
+      saldo,suaParte:((totalVenc||0)+multaT)*(minhaPct/100),minhaPct,proxVenc,parcelas
+    };
+  }
+
+  if(c.modalidade==='diario'){
+    // MODELO: (principal + juros%) ÷ prazo = parcela diária fixa
+    // Ex: 1.000 + 30% = 1.300 ÷ 10 dias = R$130/dia
+    const taxaTotal=parseFloat(c.jurosDiario)||0; // aqui jurosDiario = % total sobre o principal
+    const prazo=parseInt(c.prazo)||10;
+    const carencia=parseInt(c.carencia)||0;
+    const diasUteis=c.diasUteis||'nao';
+
+    const totalContrato=principal*(1+taxaTotal/100); // ex: 1.300
+    const parcelaDiaria=totalContrato/prazo;          // ex: 130
+
+    // Montar lista de dias úteis de pagamento (pulando exceções)
+    const di=new Date(c.dataInicio+'T00:00:00'); di.setHours(0,0,0,0);
+    const dc=new Date(di); dc.setDate(dc.getDate()+carencia); // fim da carência
+
+    const diasExcSemana=(c.diasSemanaExc||[]).map(Number);
+    const datasExcArr=c.datasExc||[];
+
+    function isDiaUtil2(d){
+      if(diasExcSemana.includes(d.getDay())) return false;
+      const dd=String(d.getDate()).padStart(2,'0');
+      const mm=String(d.getMonth()+1).padStart(2,'0');
+      if(datasExcArr.includes(dd+'/'+mm)) return false;
+      if((diasUteis==='semMulta'||diasUteis==='proximo'||diasUteis==='anterior')&&(isFDS(d)||isFeriado(d))) return false;
+      return true;
+    }
+
+    // Gerar todos os dias de pagamento
+    const diasPagamento=[];
+    let cur=new Date(dc);
+    let tentativas=0;
+    while(diasPagamento.length<prazo&&tentativas<prazo*4){
+      tentativas++;
+      cur=new Date(cur); cur.setDate(cur.getDate()+1);
+      if(isDiaUtil2(cur)) diasPagamento.push(new Date(cur));
+    }
+
+    const dataVenc=diasPagamento.length>0?diasPagamento[diasPagamento.length-1]:new Date(dc);
+
+    // Verificar pagamentos feitos (por índice do dia ou por data)
+    const pgsContrato=getPgs(i);
+    function pagouDia(diaPag){
+      return pgsContrato.some(pg=>{
+        if(pg.tipo!=='juros'&&pg.tipo!=='amortizacao'&&pg.tipo!=='quitacao') return false;
+        const pd=new Date(pg.data+'T00:00:00');
+        return pd.toDateString()===diaPag.toDateString()||
+               (pg.refDia&&pg.refDia===diaPag.toISOString().split('T')[0]);
+      });
+    }
+
+    // Dias pagos e em aberto
+    const diasPagos=diasPagamento.filter(d=>pagouDia(d)).length;
+    const diasEmAberto=diasPagamento.filter(d=>d<=today&&!pagouDia(d));
+    const totalPago=diasPagos*parcelaDiaria;
+    const totalRestante=totalContrato-totalPago;
+
+    // Próximo dia a pagar
+    const proxDiaPag=diasPagamento.find(d=>!pagouDia(d)&&d>=today)||null;
+    const atrasado=diasEmAberto.length>0;
+    const da=atrasado?diasEntre(diasEmAberto[0],today):0;
+
+    // Multa só sobre dias em aberto passados (não exceções)
+    const diasMulta=diasEmAberto.filter(d=>d<today).length;
+    const mt=multaFixa+diasMulta*multa;
+
+    return {
+      modalidade:'diario',principal,saldoPrincipal:sp,
+      totalContrato,parcelaDiaria,taxaTotal,prazo,
+      totalPago,totalRestante,diasPagos,diasEmAberto,
+      atrasado,diasAtraso:da,diasMulta,multaTotal:mt,
+      totalFinal:totalRestante+mt,
+      suaParte:(totalRestante+mt)*(minhaPct/100),
+      minhaPct,dataVenc,proxDiaPag,diasPagamento,
+      emCarencia:today<=dc
+    };
+  }
+
+  // MENSAL
+  const tj=c.tipoJuros||'percentual';
+  const jv=parseFloat(c.juros)||0;
+  // Juros sempre incidem sobre o principal total (não sobre saldo amortizado para juros mensais)
+  const jm=tj==='percentual'?principal*(jv/100):jv;
+  const dv2=parseInt(c.diaVenc)||9;
+  const pgs=getPgs(i);
+
+  // Gerar todas as parcelas desde o início até hoje
+  const dataInicio=new Date(c.dataInicio+'T00:00:00');
+  dataInicio.setHours(0,0,0,0);
+
+  // Montar lista de todos os vencimentos
+  // Regra: primeiro vencimento sempre no mês POSTERIOR ao da criação
+  // exceto se c.vencimentoMesVigente === true
+  const parcelas=[];
+  let cursor;
+  if(c.vencimentoMesVigente){
+    // Exceção: vencimento pode ser no mesmo mês
+    cursor=new Date(dataInicio.getFullYear(),dataInicio.getMonth(),dv2);
+    if(cursor<dataInicio) cursor=new Date(dataInicio.getFullYear(),dataInicio.getMonth()+1,dv2);
+  } else {
+    // Regra padrão: sempre mês posterior
+    cursor=new Date(dataInicio.getFullYear(),dataInicio.getMonth()+1,dv2);
+  }
+  // Gerar até 24 meses no futuro para cobrir todos os casos
+  for(let k=0;k<60;k++){
+    parcelas.push(new Date(cursor));
+    cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,dv2);
+    if(cursor>new Date(today.getFullYear(),today.getMonth()+2,dv2)) break;
+  }
+
+  // Para cada parcela vencida, verificar se tem pagamento vinculado
+  function pagamentoVinculado(dataParcela){
+    return pgs.some(pg=>{
+      if(pg.tipo!=='juros'&&pg.tipo!=='reparcelamento') return false;
+      // Pagamento vinculado por refMes (mês/ano da parcela)
+      if(pg.refMes){
+        return pg.refMes===`${dataParcela.getFullYear()}-${String(dataParcela.getMonth()+1).padStart(2,'0')}`;
+      }
+      // Fallback: pagamento no mesmo mês da parcela
+      const pd=new Date(pg.data+'T00:00:00');
+      return pd.getMonth()===dataParcela.getMonth()&&pd.getFullYear()===dataParcela.getFullYear();
+    });
+  }
+
+  // Separar parcelas vencidas em aberto, vence hoje e próxima
+  const vencidas=[];
+  let proxVenc=null;
+  let venceHoje=null;
+  for(const p of parcelas){
+    if(p<today){
+      // Parcela com vencimento passado e sem pagamento = em atraso
+      if(!pagamentoVinculado(p)){
+        const diasAtr=diasEntre(p,today);
+        let diasM=diasAtr;
+        if(c.diasSemanaExc&&c.diasSemanaExc.length>0||c.datasExc&&c.datasExc.length>0){
+          diasM=0;const d2=new Date(p);
+          while(d2<today){d2.setDate(d2.getDate()+1);if(!isExcluido(d2,c))diasM++;}
+        }
+        const mt=multaFixa+diasM*multa;
+        vencidas.push({data:p,diasAtraso:diasAtr,multa:mt,total:jm+mt});
+      }
+    } else if(p.getTime()===today.getTime()){
+      // Vence hoje — não é atraso, é data de pagamento
+      if(!pagamentoVinculado(p)){
+        venceHoje=p;
+      }
+    } else {
+      if(!proxVenc) proxVenc=p;
+    }
+  }
+
+  const atrasado=vencidas.length>0;
+  const totalEmAberto=vencidas.reduce((s,v)=>s+v.total,0);
+  const diasAtraso=vencidas.length>0?vencidas[0].diasAtraso:0;
+  const multaTotal=vencidas.reduce((s,v)=>s+v.multa,0);
+
+  return {
+    modalidade:'mensal',principal,saldoPrincipal:sp,jurosMensais:jm,
+    atrasado,diasAtraso,multaTotal,
+    totalParcela:atrasado?totalEmAberto:(venceHoje?jm:jm),
+    vencidasAberto:vencidas,
+    venceHoje,
+    suaParte:(atrasado?totalEmAberto:jm)*(minhaPct/100),
+    minhaPct,proxVenc,
+    parcelasList:parcelas
+  };
+}
+
+// ============================================================
+// TIMELINE / EVOLUÇÃO
+// ============================================================
+function gerarTimeline(i){
+  const c=contratos[i];
+  const calc=calcContrato(i);
+  const pgs=getPgs(i);
+  const items=[];
+
+  if(c.modalidade==='personalizado'){
+    const totalPago=pgs.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+    let acum=0;
+    (c.parcelasCustom||[]).forEach((p,pi)=>{
+      const d=new Date(p.data+'T00:00:00');
+      acum+=parseFloat(p.valor)||0;
+      const pago2=acum<=totalPago;
+      const atras=d<today&&!pago2;
+      items.push({data:d,valor:parseFloat(p.valor),status:pago2?'pago':(atras?'vencido':'futuro'),label:`Parcela ${pi+1}`});
+    });
+  } else if(c.modalidade==='mensal'){
+    const di=new Date(c.dataInicio+'T00:00:00');
+    const n=parseInt(c.parcelas)||6;
+    const diaV=parseInt(c.diaVenc)||9;
+    const limite=n>0?n:6;
+    for(let k=0;k<limite;k++){
+      const d=new Date(di.getFullYear(),di.getMonth()+k+1,diaV);
+      const jm=calc.jurosMensais||0;
+      const pago2=pgs.some(pg=>{const pd=new Date(pg.data+'T00:00:00');return pg.tipo==='juros'&&pd.getMonth()===d.getMonth()&&pd.getFullYear()===d.getFullYear();});
+      const atras=d<today&&!pago2;
+      items.push({data:d,valor:jm,status:pago2?'pago':(atras?'vencido':'futuro'),label:`Parcela ${k+1}`});
+    }
+  } else if(c.modalidade==='diario'){
+    items.push({data:calc.dataVenc,valor:calc.totalFinal,status:isQuitado(i)?'pago':(calc.atrasado?'vencido':'futuro'),label:'Vencimento'});
+  }
+  return items;
+}
+
+// ============================================================
+// FILTROS
+// ============================================================
+let filtroAtual='todos';
+function setFiltro(f,el){
+  filtroAtual=f;
+  document.querySelectorAll('.filtro-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderContratos();
+}
+
+function getStatusFiltro(i){
+  if(isQuitado(i)) return 'quitado';
+  const calc=calcContrato(i);
+  if(calc.modalidade==='mensal'||calc.modalidade==='unica'){
+    if(calc.atrasado||calc.alertaPenhora) return 'atrasado';
+    if(calc.venceHoje) return 'vence_hoje';
+    if(calc.pagouJurosMes) return 'em_dia';
+    return 'vincendo';
+  } else if(calc.modalidade==='diario'){
+    if(calc.atrasado) return 'atrasado';
+    if(calc.emCarencia) return 'vincendo';
+    return 'vincendo';
+  } else {
+    if(calc.atrasado) return 'atrasado';
+    return 'vincendo';
+  }
+}
+
+// ============================================================
+// RENDER DASHBOARD
+// ============================================================
+function renderContratos(){
+  const lista=document.getElementById('listaContratos');
+  if(!contratos.length){lista.innerHTML='<div class="empty">Nenhum contrato.<br>Clique em "+ Novo" para começar.</div>';atualizarCards();renderAlertas();return;}
+
+  const contratosFiltrados=contratos.map((c,i)=>({c,i})).filter(({i})=>{
+    if(filtroAtual==='todos') return true;
+    return getStatusFiltro(i)===filtroAtual;
+  });
+
+  if(!contratosFiltrados.length){
+    lista.innerHTML='<div class="empty">Nenhum contrato neste filtro.</div>';
+    atualizarCards();renderAlertas();return;
+  }
+
+  lista.innerHTML=contratosFiltrados.map(({c,i})=>{
+    const calc=calcContrato(i);
+    const status=getStatusDivida(i);
+    const quitado=status==='quitado';
+    let badge='',totalLabel='',totalColor='',totalValor=0;
+
+    if(quitado){
+      badge='<span class="badge badge-quitado">✓ Quitado</span>';
+      totalLabel='Quitado';totalColor='var(--accent)';totalValor=0;
+    } else if(status==='reparcelado'){
+      badge='<span class="badge badge-reparc">Reparcelado</span>';
+    } else if(status==='parcial'){
+      badge='<span class="badge badge-parcial">Amortizado</span>';
+    }
+
+    if(!quitado){
+      if(calc.modalidade==='diario'){
+        if(calc.emCarencia){
+          totalValor=0;
+          if(!badge)badge='<span class="badge badge-carencia">Carência</span>';totalLabel='Em carência';totalColor='var(--accent4)';
+        } else if(calc.diasPagos===parseInt(c.prazo)){
+          totalValor=0;
+          if(!badge)badge='<span class="badge badge-quitado">✓ Quitado</span>';totalLabel='Pago integralmente';totalColor='var(--accent)';
+        } else if(calc.atrasado){
+          totalValor=calc.totalFinal;
+          if(!badge)badge=`<span class="badge badge-vencido">${calc.diasEmAberto?calc.diasEmAberto.length:1} dia(s) em aberto</span>`;totalLabel='Saldo em aberto';totalColor='var(--accent2)';
+        } else {
+          totalValor=calc.totalRestante||0;
+          const proxStr=calc.proxDiaPag?calc.proxDiaPag.toLocaleDateString('pt-BR'):'—';
+          if(!badge)badge=`<span class="badge badge-vence">Próx. ${proxStr}</span>`;totalLabel='Saldo restante';totalColor='var(--accent3)';
+        }
+      } else if(calc.modalidade==='personalizado'){
+        totalValor=calc.totalParcela;
+        if(calc.atrasado){if(!badge)badge=`<span class="badge badge-vencido">${calc.diasAtraso}d atraso</span>`;totalLabel='Parcela vencida';totalColor='var(--accent2)';}
+        else if(calc.proxVenc){if(!badge)badge=`<span class="badge badge-vence">Vence ${calc.proxVenc.toLocaleDateString('pt-BR')}</span>`;totalLabel='Próx. parcela';totalColor='var(--accent3)';}
+        else{if(!badge)badge='<span class="badge badge-ok">Em dia</span>';totalLabel='';totalColor='var(--accent)';}
+      } else if(calc.modalidade==='unica'){
+        totalValor=calc.totalParcela;
+        if(calc.alertaPenhora){
+          if(!badge)badge=`<span class="badge badge-vencido">⚠️ PENHORA</span>`;
+          totalLabel='4+ meses só juros — principal vencido';totalColor='var(--accent2)';
+        } else if(calc.atrasado){
+          if(!badge)badge=`<span class="badge badge-vencido">${calc.diasAtraso}d atraso</span>`;
+          totalLabel='Em aberto';totalColor='var(--accent2)';
+        } else if(calc.venceHoje){
+          if(!badge)badge=`<span class="badge" style="background:#001a2a;color:#44ffcc;border:1px solid #44ffcc;">📅 Vence hoje</span>`;
+          totalLabel='Vence hoje';totalColor='#44ffcc';
+        } else if(calc.pagouJurosMes){
+          if(!badge)badge=`<span class="badge badge-parcial">Juros pagos (${calc.mesesSoJuros}/${4})</span>`;
+          totalLabel='Próx. vencimento';totalColor='var(--accent3)';
+          totalValor=calc.jurosMensais;
+        } else {
+          if(!badge)badge=`<span class="badge badge-vence">Vence ${calc.proxVenc?calc.proxVenc.toLocaleDateString('pt-BR'):'—'}</span>`;
+          totalLabel='Principal + juros';totalColor='var(--accent3)';
+          totalValor=calc.totalQuitacao;
+        }
+      } else {
+        totalValor=calc.totalParcela;
+        if(calc.atrasado){
+          const nv=calc.vencidasAberto?calc.vencidasAberto.length:1;
+          if(!badge)badge=`<span class="badge badge-vencido">${nv} parcela(s) em atraso</span>`;
+          totalLabel=nv>1?`${nv} parcelas em aberto`:'Parcela em aberto';
+          totalColor='var(--accent2)';
+        } else if(calc.venceHoje){
+          if(!badge)badge=`<span class="badge" style="background:#001a2a;color:#44ffcc;border:1px solid #44ffcc;">📅 Vence hoje</span>`;
+          totalLabel='Vence hoje';totalColor='#44ffcc';
+        } else {
+          if(!badge)badge=`<span class="badge badge-vence">Vence ${calc.proxVenc?calc.proxVenc.toLocaleDateString('pt-BR'):'—'}</span>`;
+          totalLabel='Parcela vincenda';totalColor='var(--accent3)';
+        }
+      }
+    }
+
+    const tipoLabel=c.modalidade==='unica'?`${c.tipoJuros==='fixo'?fmt(parseFloat(c.juros))+'/mês':c.juros+'% ao mês'} (única)`:c.modalidade==='diario'?`${fmt(calc.parcelaDiaria||0)}/dia (${c.jurosDiario}% total)`:
+      c.modalidade==='personalizado'?`${(c.parcelasCustom||[]).length} parcelas livres`:
+      (c.tipoJuros==='fixo'?fmt(parseFloat(c.juros))+'/mês':`${c.juros}% ao mês`);
+
+    const pgs=getPgs(i);
+
+    return `<div class="contrato${quitado?' quitado':''}">
+      <div class="btn-actions">
+        <button class="btn-icon msg" onclick="abrirMsg(${i})" title="Cobrar">💬</button>
+        <button class="btn-icon evo" onclick="abrirHistorico(${i})" title="Histórico">📜</button>
+        <button class="btn-icon ant" onclick="abrirAntecipacao(${i})" title="Antecipação">⚡</button>
+        <button class="btn-icon pay" onclick="abrirPagamento(${i})" title="Pagamento">💵</button>
+        <button class="btn-icon ren" onclick="abrirRenovacao(${i})" title="Renovar">🔄</button>
+        <button class="btn-icon" style="border-color:var(--border);color:var(--muted);" onmouseover="this.style.borderColor='var(--accent5)';this.style.color='var(--accent5)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'" onclick="abrirRemodelagem(${i})" title="Remodelar contrato">📝</button>
+        <button class="btn-icon edit" onclick="abrirEdit(${i})" title="Editar">✎</button>
+        <button class="btn-icon del" onclick="deletar(${i})" title="Excluir">✕</button>
+      </div>
+      <div class="contrato-header">
+        <div><div class="contrato-nome">${c.nome}</div>
+        <div class="contrato-tipo">${c.modalidade==='diario'?'📅 Diário':c.modalidade==='personalizado'?'📝 Personalizado':'📆 Mensal'}</div></div>
+        ${badge}
+      </div>
+      <div class="contrato-info">
+        <div class="info-item">Principal <span>${fmt(parseFloat(c.principal))}</span></div>
+        ${calc.saldoPrincipal!==parseFloat(c.principal)?`<div class="info-item">Saldo <span style="color:var(--accent4)">${fmt(calc.saldoPrincipal)}</span></div>`:''}
+        <div class="info-item">Juros <span>${tipoLabel}</span></div>
+        ${c.modalidade==='diario'?`
+          <div class="info-item">Prazo <span>${c.prazo||'—'} dias</span></div>
+          <div class="info-item">Pagos <span style="color:var(--accent)">${calc.diasPagos||0}/${c.prazo||0} dias</span></div>
+          ${parseInt(c.carencia)>0?`<div class="info-item">Carência <span>${c.carencia}d</span></div>`:''}
+          <div class="info-item">Total contrato <span>${fmt(calc.totalContrato||0)}</span></div>
+          ${calc.diasEmAberto&&calc.diasEmAberto.length>0?`<div class="info-item">Dias em aberto <span style="color:var(--accent2)">${calc.diasEmAberto.length}</span></div>`:''}
+        `:c.modalidade==='mensal'?`<div class="info-item">Vence dia <span>${c.diaVenc}</span></div>`:''}
+        ${calc.multaTotal>0?`<div class="info-item">Multa <span style="color:var(--accent2)">${fmt(calc.multaTotal)}</span></div>`:''}
+        ${c.sociedade==='sim'?`<div class="info-item">Soc. <span>${c.minhaPct}% seu</span></div>`:''}
+        ${pgs.length>0?`<div class="info-item">Pagtos <span style="color:var(--accent)">${pgs.length} registro(s)</span></div>`:''}
+        ${calc.modalidade==='unica'&&calc.mesesSoJuros>0?`<div class="info-item" style="grid-column:1/-1"><span style="color:${calc.alertaPenhora?'var(--accent2)':'var(--accent3)'};">${calc.alertaPenhora?'⚠️ LIMITE ATINGIDO':'⏳'} ${calc.mesesSoJuros} mês(es) só com juros${calc.alertaPenhora?' — PENHORA APLICÁVEL':` (máx. 4)`}</span></div>`:''}
+        ${c.obs?`<div class="info-item" style="grid-column:1/-1">Obs <span>${c.obs}</span></div>`:''}
+      </div>
+      ${!quitado&&calc.modalidade==='mensal'&&calc.atrasado&&calc.vencidasAberto&&calc.vencidasAberto.length>1?`
+        <div style="margin-bottom:8px;">
+          ${calc.vencidasAberto.map(v=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:var(--surface2);border-radius:5px;margin-bottom:3px;font-size:11px;">
+              <span style="color:var(--muted);font-family:'Space Mono',monospace;">${v.data.toLocaleDateString('pt-BR')} <span style="color:var(--accent2)">(${v.diasAtraso}d)</span></span>
+              <span style="font-family:'Space Mono',monospace;font-weight:700;color:var(--accent2)">${fmt(v.total)}</span>
+            </div>`).join('')}
+        </div>`:''}
+      ${!quitado&&totalValor>0?`<div class="contrato-total">
+        <div class="total-label">${totalLabel}</div>
+        <div><div class="total-value" style="color:${totalColor}">${fmt(totalValor)}</div>
+        ${c.sociedade==='sim'?`<div class="sua-parte">Sua parte: ${fmt(calc.suaParte)}</div>`:''}</div>
+      </div>`:''}
+    </div>`;
+  }).join('');
+
+  atualizarCards();renderAlertas();
+}
+
+function atualizarCards(){
+  let tC=0,tS=0,tV=0,tA=0;
+  contratos.forEach((c,i)=>{
+    if(isQuitado(i)) return;
+    const calc=calcContrato(i);
+    const v=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+    tC+=v;tS+=calc.suaParte||0;
+    if(calc.atrasado) tV+=calc.suaParte||0;
+    else{
+      const dias=calc.modalidade==='diario'?diasEntre(today,calc.dataVenc):
+        calc.proxVenc?diasEntre(today,calc.proxVenc):999;
+      if(dias<=7) tA+=calc.suaParte||0;
+    }
+  });
+  document.getElementById('totalCarteira').textContent=fmt(tC);
+  document.getElementById('totalSuaParte').textContent=fmt(tS);
+  document.getElementById('totalVencidos').textContent=fmt(tV);
+  document.getElementById('totalAVencer').textContent=fmt(tA);
+}
+
+function renderAlertas(){
+  const box=document.getElementById('alertasVencimento');
+  const al=[];
+  contratos.forEach((c,i)=>{
+    if(isQuitado(i)) return;
+    const calc=calcContrato(i);
+    const pv=calc.modalidade==='diario'?calc.dataVenc:calc.proxVenc;
+    if(pv&&!calc.atrasado){
+      const d=diasEntre(today,pv);
+      if(d<=7) al.push({nome:c.nome,dias:d,valor:calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela});
+    }
+  });
+  if(!al.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="alert-box"><div class="alert-title">⚠️ Vencendo em até 7 dias</div>`+
+    al.map(a=>`<div class="alert-item"><span>${a.nome} — em ${a.dias}d</span><span style="color:var(--accent3)">${fmt(a.valor)}</span></div>`).join('')+`</div>`;
+}
+
+// ============================================================
+// CRUD CONTRATOS
+// ============================================================
+function salvarContrato(){
+  const nome=document.getElementById('f_nome').value.trim();
+  const principal=document.getElementById('f_principal').value;
+  if(!nome||!principal){alert('Preencha nome e valor.');return;}
+  const mod=document.getElementById('f_modalidade').value;
+  const c={
+    nome,principal,
+    dataInicio:document.getElementById('f_dataInicio').value,
+    modalidade:mod,
+    tipoJuros:document.getElementById('f_tipoJuros').value,
+    juros:document.getElementById('f_juros').value,
+    diaVenc:document.getElementById('f_diaVenc').value,
+    vencimentoMesVigente:document.getElementById('f_vencimentoMesVigente').value==='sim',
+    parcelas:document.getElementById('f_parcelas').value||'0',
+    jurosDiario:document.getElementById('f_jurosDiario').value,
+    carencia:document.getElementById('f_carencia').value||'0',
+    prazo:document.getElementById('f_prazo').value,
+    diasUteis:document.getElementById('f_diasUteis').value,
+    multa:document.getElementById('f_multa').value||'0',
+    multaFixa:document.getElementById('f_multaFixa').value||'0',
+    diasSemanaExc:getDiasSemanaExc('f'),
+    datasExc:[...datasExcluidas_f],
+    tomPadrao:document.getElementById('f_tomPadrao').value||'neutro',
+    sociedade:document.getElementById('f_sociedade').value,
+    socioId:document.getElementById('f_socioId')?document.getElementById('f_socioId').value:'',
+    minhaPct:document.getElementById('f_minhaPct').value||'100',
+    obs:document.getElementById('f_obs').value,
+    parcelasCustom:mod==='personalizado'?[...parcelasCustom_f.map(p=>({data:p.data,valor:p.valor}))]:[],
+    criadoEm:new Date().toISOString()
+  };
+  contratos.push(c);
+  salvarDados();renderContratos();
+  // reset
+  ['nome','principal','juros','multa','multaFixa','diaVenc','parcelas','obs','minhaPct','socioPct','jurosDiario','carencia','prazo'].forEach(k=>{const el=document.getElementById('f_'+k);if(el)el.value='';});
+  parcelasCustom_f=[];datasExcluidas_f=[];
+  document.getElementById('f_parcelas_custom').innerHTML='';
+  document.getElementById('f_datasExcluidas').innerHTML='';
+  document.querySelectorAll('#f_diasSemana input[type=checkbox]').forEach(cb=>cb.checked=false);
+  switchTab('dashboard',document.querySelectorAll('.tab')[0]);
+}
+
+function deletar(i){
+  if(!confirm('Excluir contrato de '+contratos[i].nome+'?'))return;
+  contratos.splice(i,1);
+  const np={};
+  Object.keys(pagamentos).forEach(k=>{const ki=parseInt(k);if(ki<i)np[ki]=pagamentos[k];else if(ki>i)np[ki-1]=pagamentos[k];});
+  pagamentos=np;salvarDados().then(()=>renderContratos());
+}
+
+function abrirEdit(i){
+  editIndex=i;const c=contratos[i];
+  ['nome','principal','dataInicio','tipoJuros','juros','diaVenc','parcelas','jurosDiario','carencia','prazo','diasUteis','multa','multaFixa','obs'].forEach(k=>{const el=document.getElementById('e_'+k);if(el)el.value=c[k]||'';});
+  document.getElementById('e_modalidade').value=c.modalidade||'mensal';
+  const evmv=document.getElementById('e_vencimentoMesVigente');if(evmv)evmv.value=c.vencimentoMesVigente?'sim':'nao';
+  document.getElementById('e_sociedade').value=c.sociedade||'nao';
+  document.getElementById('e_minhaPct').value=c.minhaPct||'';
+  document.getElementById('e_socioPct').value=100-(parseFloat(c.minhaPct)||100);
+  document.getElementById('e_tomPadrao').value=c.tomPadrao||'neutro';
+  toggleModalidade('e');toggleJuros('e');toggleSociedade('e');
+  // Popular select de sócios no modal editar
+  const eSelSocio=document.getElementById('e_socioId');
+  if(eSelSocio){
+    eSelSocio.innerHTML='<option value="">— Selecione —</option>';
+    socios.forEach((s,si)=>eSelSocio.innerHTML+=`<option value="${si}">${s.nome}</option>`);
+    if(c.socioId!==undefined&&c.socioId!=='') eSelSocio.value=String(c.socioId);
+  }
+  document.getElementById('modalEdit').classList.add('open');
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='modalEdit')editIndex=-1;}
+function closeOnOverlay(e,id){if(e.target===e.currentTarget)closeModal(id);}
+function atualizarContrato(){
+  if(editIndex<0)return;
+  const c=contratos[editIndex];
+  ['nome','principal','dataInicio','tipoJuros','juros','diaVenc','parcelas','jurosDiario','carencia','prazo','diasUteis','multa','multaFixa','obs'].forEach(k=>{const el=document.getElementById('e_'+k);if(el)c[k]=el.value;});
+  c.modalidade=document.getElementById('e_modalidade').value;
+  const evmv2=document.getElementById('e_vencimentoMesVigente');if(evmv2)c.vencimentoMesVigente=evmv2.value==='sim';
+  c.sociedade=document.getElementById('e_sociedade').value;
+  c.socioId=document.getElementById('e_socioId')?document.getElementById('e_socioId').value:'';
+  c.minhaPct=document.getElementById('e_minhaPct').value;
+  c.tomPadrao=document.getElementById('e_tomPadrao').value;
+  salvarDados().then(()=>{closeModal('modalEdit');renderContratos();});
+}
+
+async function salvarDados(){
+  // Sempre salva no localStorage como backup local
+  localStorage.setItem('contratos_v3', JSON.stringify(contratos));
+  localStorage.setItem('pagamentos_v3', JSON.stringify(pagamentos));
+  localStorage.setItem('config_v3', JSON.stringify(config));
+  localStorage.setItem('socios_v3', JSON.stringify(socios));
+
+  const payload = {
+    id: 1,
+    contratos: contratos,
+    pagamentos: pagamentos,
+    config: config,
+    socios: socios,
+    atualizado_em: new Date().toISOString()
+  };
+  try {
+    // Tenta PATCH (atualizar linha existente)
+    const r = await fetch(SUPA_URL + '/rest/v1/dados?id=eq.1', {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(payload)
+    });
+    // Se não atualizou nenhuma linha, insere
+    const count = r.headers.get('content-range');
+    if(count === '*/0' || !count) {
+      await fetch(SUPA_URL + '/rest/v1/dados', {
+        method: 'POST',
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(payload)
+      });
+    }
+  } catch(e) {
+    console.warn('Supabase offline, usando localStorage:', e.message);
+  }
+}
+
+// ============================================================
+// PAGAMENTOS
+// ============================================================
+function abrirPagamento(i){
+  msgIdx=i;
+  const c=contratos[i];
+  const calc=calcContrato(i);
+  const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+  document.getElementById('pg_titulo').textContent='💵 Registrar Pagamento — '+c.nome;
+  document.getElementById('pg_valor').value='';
+  document.getElementById('pg_obs').value='';
+  document.getElementById('pg_data').value=today.toISOString().split('T')[0];
+  document.getElementById('pg_tipo').value='juros';
+
+  // Montar seletor de parcela de referência (só mensal)
+  const refBox=document.getElementById('pg_ref_box');
+  const refSel=document.getElementById('pg_ref_mes');
+  if(calc.modalidade==='mensal'){
+    refBox.style.display='block';
+    refSel.innerHTML='<option value="">— Selecione a parcela —</option>';
+    // Parcelas vencidas em aberto
+    if(calc.vencidasAberto&&calc.vencidasAberto.length>0){
+      const grp=document.createElement('optgroup');
+      grp.label='Em atraso';
+      calc.vencidasAberto.forEach(v=>{
+        const key=`${v.data.getFullYear()}-${String(v.data.getMonth()+1).padStart(2,'0')}`;
+        const opt=document.createElement('option');
+        opt.value=key;
+        opt.textContent=`${v.data.toLocaleDateString('pt-BR')} — ${fmt(v.total)} (${v.diasAtraso}d atraso)`;
+        opt.dataset.valor=v.total.toFixed(2);
+        grp.appendChild(opt);
+      });
+      refSel.appendChild(grp);
+      // Auto-selecionar a mais antiga
+      refSel.value=`${calc.vencidasAberto[0].data.getFullYear()}-${String(calc.vencidasAberto[0].data.getMonth()+1).padStart(2,'0')}`;
+      document.getElementById('pg_valor').value=calc.vencidasAberto[0].total.toFixed(2);
+    }
+    // Próxima parcela vincenda
+    if(calc.proxVenc){
+      const grp2=document.createElement('optgroup');
+      grp2.label='Vincenda';
+      const key2=`${calc.proxVenc.getFullYear()}-${String(calc.proxVenc.getMonth()+1).padStart(2,'0')}`;
+      const opt2=document.createElement('option');
+      opt2.value=key2;
+      opt2.textContent=`${calc.proxVenc.toLocaleDateString('pt-BR')} — ${fmt(calc.jurosMensais)}`;
+      opt2.dataset.valor=calc.jurosMensais.toFixed(2);
+      grp2.appendChild(opt2);
+      refSel.appendChild(grp2);
+    }
+    // Ao mudar seleção, preencher valor sugerido
+    refSel.onchange=function(){
+      const sel=this.options[this.selectedIndex];
+      if(sel&&sel.dataset.valor) document.getElementById('pg_valor').value=sel.dataset.valor;
+    };
+  } else {
+    refBox.style.display='none';
+  }
+
+  document.getElementById('pg_saldo_preview').style.display='block';
+  if(c.modalidade==='diario'){
+    document.getElementById('pg_saldo_preview').innerHTML=`
+      <div class="result-row"><span>Parcela diária</span><span style="color:var(--accent)">${fmt(calc.parcelaDiaria||0)}</span></div>
+      <div class="result-row"><span>Dias pagos</span><span>${calc.diasPagos||0} de ${c.prazo}</span></div>
+      <div class="result-row"><span>Saldo restante</span><span style="color:var(--accent2)">${fmt(calc.totalRestante||0)}</span></div>`;
+    document.getElementById('pg_valor').value=(calc.parcelaDiaria||0).toFixed(2);
+    // Para diário, referência é a data do dia
+    document.getElementById('pg_ref_box').style.display='none';
+  } else {
+    document.getElementById('pg_saldo_preview').innerHTML=`
+      <div class="result-row"><span>Saldo principal</span><span>${fmt(calc.saldoPrincipal)}</span></div>
+      <div class="result-row"><span>Total em aberto</span><span style="color:var(--accent2)">${fmt(tv)}</span></div>`;
+  }
+  // Ajustar opções de tipo conforme modalidade
+  const pgTipo=document.getElementById('pg_tipo');
+  const opts=pgTipo.querySelectorAll('option');
+  const isUnica=contratos[i].modalidade==='unica';
+  opts.forEach(o=>{
+    if(o.value==='juros') o.style.display=isUnica?'':'none';
+    if(o.value==='quitacao_total_unica') o.style.display=isUnica?'':'none';
+    if(o.value==='amortizacao') o.style.display='';
+    if(o.value==='quitacao') o.style.display=isUnica?'none':'';
+    if(o.value==='reparcelamento') o.style.display='';
+  });
+  if(isUnica){
+    pgTipo.value='juros';
+    atualizarTipoPagamento();
+  } else {
+    pgTipo.value='juros';
+    const av=document.getElementById('pg_aviso_unica');
+    if(av) av.style.display='none';
+  }
+  document.getElementById('modalPagamento').classList.add('open');
+}
+function atualizarTipoPagamento(){
+  const idx=msgIdx;
+  if(idx<0) return;
+  const c=contratos[idx];
+  const calc=calcContrato(idx);
+  const tipo=document.getElementById('pg_tipo').value;
+  const aviso=document.getElementById('pg_aviso_unica');
+  if(c.modalidade==='unica'){
+    if(tipo==='juros'){
+      const mesesRestantes=4-calc.mesesSoJuros;
+      aviso.style.display='block';
+      aviso.textContent=`⚠️ Pagando só os juros (${fmt(calc.jurosMensais)}), o principal de ${fmt(calc.principal)} renova pro próximo mês. Você pode fazer isso por mais ${mesesRestantes} mês(es) antes do limite de penhora.`;
+      document.getElementById('pg_valor').value=calc.jurosMensais.toFixed(2);
+    } else if(tipo==='quitacao_total_unica'){
+      aviso.style.display='block';
+      aviso.style.background='#001a0a';
+      aviso.style.borderColor='var(--accent)';
+      aviso.style.color='var(--accent)';
+      aviso.textContent=`✅ Quitação total: ${fmt(calc.totalQuitacao)} (principal ${fmt(calc.principal)} + juros ${fmt(calc.jurosMensais)}). Encerra o contrato.`;
+      document.getElementById('pg_valor').value=calc.totalQuitacao.toFixed(2);
+    } else {
+      aviso.style.display='none';
+    }
+  } else {
+    aviso.style.display='none';
+  }
+}
+
+function registrarPagamento(){
+  const i=msgIdx;if(i<0)return;
+  const valor=parseFloat(document.getElementById('pg_valor').value)||0;
+  const tipo=document.getElementById('pg_tipo').value;
+  const data=document.getElementById('pg_data').value;
+  const obs=document.getElementById('pg_obs').value;
+  const refMes=document.getElementById('pg_ref_mes').value||null;
+  if(!valor){alert('Informe o valor.');return;}
+  if(contratos[i].modalidade==='mensal'&&tipo==='juros'&&!refMes){
+    alert('Selecione a parcela de referência.');return;
+  }
+  // Parcela única: quitacao_total_unica vira quitacao
+  const tipoFinal=tipo==='quitacao_total_unica'?'quitacao':tipo;
+  if(!pagamentos[i]) pagamentos[i]=[];
+  pagamentos[i].push({tipo:tipoFinal,valor,data,obs,refMes,registradoEm:new Date().toISOString()});
+  salvarDados().then(()=>{closeModal('modalPagamento');renderContratos();});
+}
+
+// ============================================================
+// HISTÓRICO / EVOLUÇÃO
+// ============================================================
+function abrirHistorico(i){
+  histIdx=i;const c=contratos[i];const calc=calcContrato(i);const pgs=getPgs(i);
+  document.getElementById('hist_titulo').textContent='📜 '+c.nome;
+  const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+  const totalPago=pgs.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+  document.getElementById('hist_saldo').innerHTML=`
+    <div class="result-row"><span>Principal Original</span><span>${fmt(parseFloat(c.principal))}</span></div>
+    <div class="result-row"><span>Saldo Principal</span><span style="color:var(--accent4)">${fmt(calc.saldoPrincipal)}</span></div>
+    <div class="result-row"><span>Total Pago</span><span style="color:var(--accent)">${fmt(totalPago)}</span></div>
+    <div class="result-row"><span>Total em Aberto</span><span style="color:var(--accent2);font-weight:700">${fmt(isQuitado(i)?0:tv)}</span></div>`;
+
+  // Timeline
+  const items=gerarTimeline(i);
+  document.getElementById('hist_timeline').innerHTML=items.map(it=>{
+    const cor=it.status==='pago'?'var(--accent)':it.status==='vencido'?'var(--accent2)':'var(--border)';
+    return `<div class="tl-item">
+      <div class="tl-dot ${it.status}" style="background:${cor};"></div>
+      <div class="tl-content">
+        <div class="tl-data">${it.data.toLocaleDateString('pt-BR')} — ${it.label}</div>
+        <div class="tl-valor" style="color:${cor}">${fmt(it.valor)}</div>
+        <div class="tl-status">${it.status==='pago'?'✓ Pago':it.status==='vencido'?'⚠ Vencido':'Pendente'}</div>
+      </div>
+    </div>`;
+  }).join('')||'<div style="color:var(--muted);font-size:11px;">Sem parcelas cadastradas.</div>';
+
+  // Pagamentos
+  document.getElementById('hist_lista').innerHTML=!pgs.length?
+    '<div style="color:var(--muted);font-size:11px;padding:8px 0;">Nenhum pagamento registrado.</div>':
+    pgs.map((p,pi)=>{
+      const tc={'juros':'hist-pgto','amortizacao':'hist-amort','quitacao':'hist-quit','reparcelamento':'hist-reparc'}[p.tipo]||'hist-pgto';
+      const tl={'juros':'Juros','amortizacao':'Amortização','quitacao':'Quitação','reparcelamento':'Reparcelamento'}[p.tipo]||p.tipo;
+      const refLabel=p.refMes?` — ref. ${p.refMes.split('-')[1]}/${p.refMes.split('-')[0]}`:'';
+      return `<div class="hist-item">
+        <div><span class="hist-tipo ${tc}">${tl}</span> <span style="color:var(--muted);font-size:10px">${fmtDate(p.data)}${refLabel}</span>
+        ${p.obs?`<br><span style="color:var(--muted);font-size:10px">${p.obs}</span>`:''}</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:'Space Mono',monospace;font-weight:700;color:var(--accent)">${fmt(p.valor)}</span>
+          <button onclick="deletarPagamento(${i},${pi})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  // Versões anteriores
+  const versoes=c.versoes||[];
+  let versoesHtml='';
+  if(versoes.length>0){
+    versoesHtml=`<p style="font-size:10px;font-weight:700;color:var(--accent5);text-transform:uppercase;margin:14px 0 8px;">VERSÕES ANTERIORES</p>`;
+    versoes.slice().reverse().forEach((v,vi)=>{
+      const totalPagoV=v.pagamentos.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+      const snap=v.snapshot;
+      const jurosLabel=snap.tipoJuros==='fixo'?fmt(parseFloat(snap.juros))+'/mês':snap.juros+'% ao mês';
+      versoesHtml+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:700;color:var(--accent5)">v${v.versao} — ${v.motivo}</span>
+          <span style="font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;">${fmtDate(v.dataInicio)} → ${fmtDate(v.dataFim)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">
+          <div class="info-item">Principal <span>${fmt(parseFloat(snap.principal))}</span></div>
+          <div class="info-item">Juros <span>${jurosLabel}</span></div>
+          ${snap.diaVenc?`<div class="info-item">Vencia dia <span>${snap.diaVenc}</span></div>`:''}
+          ${snap.multa&&parseFloat(snap.multa)>0?`<div class="info-item">Multa <span>${fmt(parseFloat(snap.multa))}/dia</span></div>`:''}
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Pagamentos desta versão (${v.pagamentos.length})</div>
+          ${v.pagamentos.length===0?'<div style="color:var(--muted);font-size:11px;">Nenhum pagamento registrado.</div>':
+            v.pagamentos.map(p=>{
+              const tc={'juros':'hist-pgto','amortizacao':'hist-amort','quitacao':'hist-quit','reparcelamento':'hist-reparc'}[p.tipo]||'hist-pgto';
+              const tl={'juros':'Juros','amortizacao':'Amortização','quitacao':'Quitação','reparcelamento':'Reparcelamento'}[p.tipo]||p.tipo;
+              return `<div class="hist-item"><div><span class="hist-tipo ${tc}">${tl}</span> <span style="color:var(--muted);font-size:10px">${fmtDate(p.data)}</span></div>
+                <span style="font-family:'Space Mono',monospace;font-weight:700;color:var(--accent)">${fmt(p.valor)}</span></div>`;
+            }).join('')}
+          ${v.pagamentos.length>0?`<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--accent);">Total pago: ${fmt(totalPagoV)}</div>`:''}
+        </div>
+      </div>`;
+    });
+  }
+
+  // Inserir versões no modal
+  const existing=document.getElementById('hist_versoes');
+  if(existing) existing.remove();
+  const versoesEl=document.createElement('div');
+  versoesEl.id='hist_versoes';
+  versoesEl.innerHTML=versoesHtml;
+  document.getElementById('modalHistorico').querySelector('.modal').appendChild(versoesEl);
+
+  document.getElementById('modalHistorico').classList.add('open');
+}
+function deletarPagamento(ci,pi){
+  if(!confirm('Remover este pagamento? O status do contrato será recalculado.'))return;
+  pagamentos[ci].splice(pi,1);
+  salvarDados();
+  // Reabrir histórico (fire and forget)
+  closeModal('modalHistorico');
+  renderContratos();
+  // Se ainda há pagamentos, reabrir o histórico
+  if(pagamentos[ci]&&pagamentos[ci].length>0) setTimeout(()=>abrirHistorico(ci),100);
+}
+
+// ============================================================
+// ANTECIPAÇÃO
+// ============================================================
+function abrirAntecipacao(i){
+  antIdx=i;const calc=calcContrato(i);
+  const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+  document.getElementById('ant_titulo').textContent='⚡ Antecipação — '+contratos[i].nome;
+  document.getElementById('ant_saldo').value=tv.toFixed(2);
+  document.getElementById('ant_desconto').value='';
+  document.getElementById('ant_tipo').value='quitacao';
+  document.getElementById('ant_bloco_valor').classList.add('hidden');
+  document.getElementById('ant_valor').value='';
+  document.getElementById('ant_resultado').style.display='none';
+  document.getElementById('modalAntecipacao').classList.add('open');
+}
+function calcAntecipacao(){
+  const tipo=document.getElementById('ant_tipo').value;
+  document.getElementById('ant_bloco_valor').classList.toggle('hidden',tipo!=='amortizacao');
+  const saldo=parseFloat(document.getElementById('ant_saldo').value)||0;
+  const desc=parseFloat(document.getElementById('ant_desconto').value)||0;
+  const res=document.getElementById('ant_resultado');
+  if(tipo==='quitacao'){
+    const vd=saldo*(desc/100);const vf=saldo-vd;
+    res.style.display='block';
+    res.innerHTML=`<div class="result-row"><span>Saldo Total</span><span>${fmt(saldo)}</span></div>
+      <div class="result-row"><span>Desconto (${desc}%)</span><span style="color:var(--accent2)">- ${fmt(vd)}</span></div>
+      <div class="result-row"><span>💰 Valor para Quitação</span><span style="color:var(--accent)">${fmt(vf)}</span></div>`;
+  } else {
+    const va=parseFloat(document.getElementById('ant_valor').value)||0;
+    if(!va){res.style.display='none';return;}
+    const vd=va*(desc/100);const vf=va-vd;const sr=saldo-vf;
+    res.style.display='block';
+    res.innerHTML=`<div class="result-row"><span>Valor a Amortizar</span><span>${fmt(va)}</span></div>
+      <div class="result-row"><span>Desconto (${desc}%)</span><span style="color:var(--accent2)">- ${fmt(vd)}</span></div>
+      <div class="result-row"><span>Valor com Desconto</span><span style="color:var(--accent4)">${fmt(vf)}</span></div>
+      <div class="result-row"><span>Saldo Restante</span><span style="color:var(--accent)">${fmt(sr)}</span></div>`;
+  }
+}
+function confirmarAntecipacao(){
+  const i=antIdx;if(i<0)return;
+  const tipo=document.getElementById('ant_tipo').value;
+  const saldo=parseFloat(document.getElementById('ant_saldo').value)||0;
+  const desc=parseFloat(document.getElementById('ant_desconto').value)||0;
+  let vp=tipo==='quitacao'?saldo*(1-desc/100):(parseFloat(document.getElementById('ant_valor').value)||0)*(1-desc/100);
+  if(!vp){alert('Informe os valores.');return;}
+  if(!pagamentos[i]) pagamentos[i]=[];
+  pagamentos[i].push({tipo:tipo==='quitacao'?'quitacao':'amortizacao',valor:vp,
+    data:today.toISOString().split('T')[0],obs:`Antecipação com ${desc}% de desconto`,registradoEm:new Date().toISOString()});
+  salvarDados();closeModal('modalAntecipacao');renderContratos();
+}
+
+// ============================================================
+// RENOVAÇÃO
+// ============================================================
+function abrirRenovacao(i){
+  renIdx=i;
+  document.getElementById('ren_titulo').textContent='🔄 Renovar — '+contratos[i].nome;
+  document.getElementById('ren_principal').value=contratos[i].principal;
+  document.getElementById('ren_dataInicio').value=today.toISOString().split('T')[0];
+  document.getElementById('ren_obs').value='Renovação '+today.toLocaleDateString('pt-BR');
+  document.getElementById('modalRenovacao').classList.add('open');
+}
+function confirmarRenovacao(){
+  const i=renIdx;if(i<0)return;
+  const c={...contratos[i]};
+  c.principal=document.getElementById('ren_principal').value;
+  c.dataInicio=document.getElementById('ren_dataInicio').value;
+  c.obs=document.getElementById('ren_obs').value;
+  c.criadoEm=new Date().toISOString();
+  c.parcelasCustom=c.parcelasCustom||[];
+  contratos.push(c);
+  salvarDados().then(()=>{closeModal('modalRenovacao');renderContratos();alert('Contrato renovado!');});
+}
+
+// ============================================================
+// MENSAGENS
+// ============================================================
+const MSGS={
+  emDia:{
+    amigavel:[(n,v,d)=>`${n}, tudo bem? 😊\nSó passando pra lembrar que sua parcela de *${v}* vence em ${d}. Se precisar de algo, me chama!`,(n,v,d)=>`Oi ${n}! Parcela de *${v}* vence dia ${d}. Qualquer dúvida é só falar! 👍`,(n,v,d)=>`${n}, parcela de *${v}* vencendo em ${d}. Organiza aí pra não ter surpresa! 😉`],
+    neutro:[(n,v,d)=>`${n}, sua parcela de *${v}* vence em ${d}. Qualquer dúvida, me chama.`,(n,v,d)=>`Olá ${n}. Parcela de *${v}* vence no dia ${d}.`,(n,v,d)=>`${n}, parcela de *${v}* com vencimento em ${d}. Fique atento ao prazo.`],
+    ameaca:[(n,v,d)=>`${n}, sua parcela de *${v}* vence em ${d}. Não deixe vencer — multa corre por dia.`,(n,v,d)=>`${n}. Parcela de *${v}* vencendo em ${d}. Pague em dia pra não ter complicação.`,(n,v,d)=>`${n}, prazo pra pagar *${v}* é ${d}. Atraso gera multa diária. Organize-se.`],
+    forte:[(n,v,d)=>`${n}. *${v}* vence em ${d}. Não atrase. Multa corre e o valor aumenta todo dia.`,(n,v,d)=>`${n}, última chance sem multa: *${v}* até ${d}. Depois o valor sobe.`,(n,v,d)=>`${n}. Vencimento em ${d}: *${v}*. Não há negociação após o prazo.`]
+  },
+  atrasado:{
+    amigavel:[(n,v,m,da)=>`${n}, tudo bem? 😟\nVi que você tá com ${da} dia(s) em atraso. Saldo com multa: *${v}*. Me chama pra resolver juntos!`,(n,v,m,da)=>`Oi ${n}! ${da} dia(s) de atraso, saldo: *${v}* (multa: ${m}). Qualquer dificuldade, me conta!`,(n,v,m,da)=>`${n}, ${da} dia(s) de atraso. Saldo: *${v}*. Vamos acertar? Me manda mensagem. 🙏`],
+    neutro:[(n,v,m,da)=>`${n}, você está com ${da} dia(s) de atraso. Saldo com multa: *${v}*. Aguardo regularização.`,(n,v,m,da)=>`Olá ${n}. ${da} dia(s) de atraso. Valor em aberto: *${v}* (multa: ${m}).`,(n,v,m,da)=>`${n}, ${da} dia(s) sem pagamento. Saldo: *${v}*. Entre em contato para regularizar.`],
+    ameaca:[(n,v,m,da)=>`${n}, ${da} dia(s) de atraso e o saldo chegou em *${v}* (multa: ${m}). Regularize urgente.`,(n,v,m,da)=>`${n}. ${da} dia(s) em atraso. Saldo: *${v}*. Cada dia que passa aumenta. Me chama agora.`,(n,v,m,da)=>`${n}, está devendo *${v}* há ${da} dia(s). Multa: ${m} e crescendo. Regularize hoje.`],
+    forte:[(n,v,m,da)=>`${n}. *${da} dias de atraso*. Saldo: *${v}* com multa de ${m}. Resolva HOJE. Me responde.`,(n,v,m,da)=>`${n}, não vou mais tolerar o atraso. *${v}* em aberto há ${da} dia(s). Regularize ou tomarei medidas.`,(n,v,m,da)=>`${n}. ${da} dias de atraso. *${v}* devidos. Você tem até hoje pra me dar uma posição.`]
+  }
+};
+
+function abrirMsg(i){
+  msgIdx=i;const c=contratos[i];
+  tomAtual=c.tomPadrao||'neutro';versaoAtual=0;
+  document.querySelectorAll('.tom-tab').forEach(t=>{t.classList.remove('active');if(t.classList.contains(tomAtual))t.classList.add('active');});
+  document.querySelectorAll('.msg-tab').forEach((t,idx)=>t.classList.toggle('active',idx===0));
+  gerarMsgs(i);
+  document.getElementById('msgBox').textContent=msgsCache[tomAtual][0];
+  document.getElementById('modalMsg').classList.add('open');
+}
+function gerarMsgs(i){
+  const c=contratos[i];const calc=calcContrato(i);
+  const nome=c.nome.split(' ')[0];
+  const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+  const v=fmt(tv);const m=fmt(calc.multaTotal||0);const da=calc.diasAtraso||0;
+  let d='';
+  if(calc.modalidade==='diario') d=calc.dataVenc.toLocaleDateString('pt-BR');
+  else if(calc.modalidade==='personalizado') d=calc.proxVenc?calc.proxVenc.toLocaleDateString('pt-BR'):'—';
+  else d=calc.atrasado?calc.venc.toLocaleDateString('pt-BR'):calc.proxVenc.toLocaleDateString('pt-BR');
+  const tipo=calc.atrasado?'atrasado':'emDia';
+  msgsCache={};
+  ['amigavel','neutro','ameaca','forte'].forEach(tom=>{
+    msgsCache[tom]=MSGS[tipo][tom].map(fn=>calc.atrasado?fn(nome,v,m,da):fn(nome,v,d));
+  });
+}
+function switchTom(tom,el){
+  tomAtual=tom;document.querySelectorAll('.tom-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  if(msgsCache[tom]) document.getElementById('msgBox').textContent=msgsCache[tom][versaoAtual];
+}
+function switchMsg(idx,el){
+  versaoAtual=idx;document.querySelectorAll('.msg-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  if(msgsCache[tomAtual]) document.getElementById('msgBox').textContent=msgsCache[tomAtual][idx];
+}
+function copiarMsg(){
+  navigator.clipboard.writeText(document.getElementById('msgBox').textContent).then(()=>{
+    const btn=document.querySelector('#modalMsg .btn-copy');btn.textContent='✅ Copiado!';
+    setTimeout(()=>btn.textContent='📋 Copiar para WhatsApp',2000);
+  });
+}
+
+// ============================================================
+// MENSAGEM DE CONTRATO
+// ============================================================
+function popularSelectContrato(){
+  const sel=document.getElementById('sel_contrato_msg');
+  sel.innerHTML='<option value="">— Selecione —</option>';
+  contratos.forEach((c,i)=>sel.innerHTML+=`<option value="${i}">${c.nome}</option>`);
+  document.getElementById('contrato_msg_output').style.display='none';
+  document.getElementById('btn_copy_contrato').style.display='none';
+}
+function gerarMsgContrato(){
+  const i=document.getElementById('sel_contrato_msg').value;
+  if(i===''){document.getElementById('contrato_msg_output').style.display='none';document.getElementById('btn_copy_contrato').style.display='none';return;}
+  const c=contratos[parseInt(i)];
+  const credor=config.nome||'[SEU NOME COMPLETO]';
+  const pixInfo=config.pix?`\n🔑 Pix (${config.pixTipo||''}): ${config.pix}`:'';
+  const tel=config.tel||'';
+  const dataFmt=c.dataInicio?fmtDate(c.dataInicio):'—';
+  const principal=parseFloat(c.principal)||0;
+  const multaDia=parseFloat(c.multa)||0;
+  const multaFixa=parseFloat(c.multaFixa)||0;
+
+  // FORMA DE PAGAMENTO
+  let formaPagamento='';
+  if(c.modalidade==='personalizado'){
+    formaPagamento=`O valor será pago da seguinte forma:\n`+
+      (c.parcelasCustom||[]).map((p,pi)=>`- Parcela ${pi+1}: ${fmtDate(p.data)} – ${fmt(parseFloat(p.valor))}`).join('\n');
+  } else if(c.modalidade==='diario'){
+    const di=new Date(c.dataInicio+'T00:00:00'); di.setHours(0,0,0,0);
+    const prazo=parseInt(c.prazo)||20;
+    const carencia=parseInt(c.carencia)||0;
+    const jd=parseFloat(c.jurosDiario)||0;
+    const totalContratoDiario=principal*(1+jd/100);
+    const parcDiaria=totalContratoDiario/prazo;
+    const diasExcSemana=(c.diasSemanaExc||[]).map(Number);
+    const datasExcArr=c.datasExc||[];
+    let cur=new Date(di); cur.setDate(cur.getDate()+carencia);
+    const linhasDiario=[];
+    let diasContados=0;
+    let tentativas=0;
+    while(diasContados<prazo&&tentativas<prazo*3){
+      tentativas++;
+      cur=new Date(cur); cur.setDate(cur.getDate()+1);
+      const excSemana=diasExcSemana.includes(cur.getDay());
+      const excData=(()=>{const dd=String(cur.getDate()).padStart(2,'0');const mm=String(cur.getMonth()+1).padStart(2,'0');return datasExcArr.includes(dd+'/'+mm);})();
+      const excFer=isFeriado(cur);
+      if(!excSemana&&!excData&&!excFer){
+        diasContados++;
+        linhasDiario.push(`- Dia ${diasContados}: ${cur.toLocaleDateString('pt-BR')} – ${fmt(parcDiaria)}`);
+      }
+    }
+    formaPagamento=`Parcelas diárias de ${fmt(parcDiaria)} nos dias úteis:\n`+linhasDiario.join('\n');
+    } else {
+    const dv2i=parseInt(c.diaVenc)||9;
+    const di2=new Date(c.dataInicio+'T00:00:00');
+    let cur=new Date(di2.getFullYear(),di2.getMonth(),dv2i);
+    if(cur<=di2) cur=new Date(di2.getFullYear(),di2.getMonth()+1,dv2i);
+    const jm=c.tipoJuros==='fixo'?parseFloat(c.juros):principal*(parseFloat(c.juros)||0)/100;
+    const n=parseInt(c.parcelas)||0;
+    const limite=n>0?n:12;
+    const linhas=[];
+    for(let k=0;k<limite;k++){
+      const d=new Date(cur.getFullYear(),cur.getMonth()+k,dv2i);
+      linhas.push(`- Parcela ${k+1}: ${d.toLocaleDateString('pt-BR')} – ${fmt(jm)}`);
+    }
+    formaPagamento=(n===0?`Parcelas mensais (contrato aberto):\n`:`O valor será pago da seguinte forma:\n`)+linhas.join('\n');
+  }
+
+  // JUROS
+  let jurosTexto='';
+  if(c.modalidade==='mensal'){
+    const tj=c.tipoJuros==='fixo'?`valor fixo de ${fmt(parseFloat(c.juros))} por mês`:`${c.juros}% ao mês sobre o saldo emprestado`;
+    jurosTexto=`\n\n📈 JUROS:\nAplicação de ${tj}.`;
+  } else if(c.modalidade==='diario'){
+    const totalContr2=principal*(1+parseFloat(c.jurosDiario||0)/100);
+    const parcDiaria2=totalContr2/(parseInt(c.prazo)||20);
+    jurosTexto=`\n\n📈 JUROS:\nJuros de ${c.jurosDiario}% sobre o principal emprestado. Total do contrato: ${fmt(totalContr2)} em ${c.prazo} parcelas diárias de ${fmt(parcDiaria2)}.`+
+      (parseInt(c.carencia)>0?`\nCarência de ${c.carencia} dia(s) a contar da data do empréstimo.`:'');
+  }
+
+  const multaTexto=multaDia>0||multaFixa>0
+    ?`${fmt(multaDia)} por dia de atraso`+(multaFixa>0?` + multa fixa de ${fmt(multaFixa)}`:'')
+    :'conforme acordado';
+
+  const SEP='─'.repeat(38);
+  const msg=[
+    `📄 CONTRATO DE EMPRÉSTIMO PARTICULAR`,
+    ``,
+    `CREDOR: ${credor}`+(tel?`\nTel/WhatsApp: ${tel}`:''),
+    `DEVEDOR: ${c.nome}`,
+    `DATA: ${dataFmt}`,
+    SEP,
+    ``,
+    `💰 VALOR DO EMPRÉSTIMO: ${fmt(principal)}`,
+    ``,
+    `📅 FORMA DE PAGAMENTO:`,
+    formaPagamento,
+    jurosTexto,
+    ``,
+    SEP,
+    ``,
+    `⚠️ MULTA E ATRASO:`,
+    `- Multa de ${multaTexto}`,
+    `- O não pagamento no prazo implica em cobrança imediata da multa acumulada.`,
+    ``,
+    SEP,
+    ``,
+    `📌 QUITAÇÃO:`,
+    `O pagamento integral do valor emprestado (${fmt(principal)}) acrescido dos juros devidos encerra e quita o contrato em sua totalidade, sem ônus adicionais.`,
+    ``,
+    SEP,
+    ``,
+    `📌 INADIMPLÊNCIA:`,
+    `Em caso de atraso superior a 30 dias, o valor total da dívida poderá ser considerado vencido antecipadamente e cobrado pelos meios cabíveis.`,
+    ``,
+    SEP,
+    ``,
+    `📄 COMPROVAÇÃO:`,
+    `Este contrato é firmado por meio eletrônico (WhatsApp), sendo válido como instrumento particular de dívida e prova de acordo entre as partes.`,
+    pixInfo?pixInfo:'',
+    c.obs?`📝 ${c.obs}`:'',
+    config.obs?`📝 ${config.obs}`:'',
+    SEP,
+    ``,
+    `✍️ ACEITE:`,
+    `Para validação deste contrato, o DEVEDOR deverá responder a esta mensagem com:`,
+    ``,
+    `"Li e concordo com todos os termos deste contrato."`,
+    ``,
+    SEP,
+    ``,
+    `📌 RECOMENDAÇÃO:`,
+    `O DEVEDOR deverá enviar foto de documento oficial com foto para validação de identidade.`,
+    ``,
+    `_Gerado em ${today.toLocaleDateString('pt-BR')}_`
+  ].filter(l=>l!==null).join('\n');
+
+  document.getElementById('contrato_msg_output').textContent=msg;
+  document.getElementById('contrato_msg_output').style.display='block';
+  document.getElementById('btn_copy_contrato').style.display='block';
+}
+function copiarContrato(){
+  navigator.clipboard.writeText(document.getElementById('contrato_msg_output').textContent).then(()=>{
+    const btn=document.getElementById('btn_copy_contrato');btn.textContent='✅ Copiado!';
+    setTimeout(()=>btn.textContent='📋 Copiar mensagem',2000);
+  });
+}
+
+// ============================================================
+// RELATÓRIO MENSAL
+// ============================================================
+function renderRelatorio(){
+  const mes=parseInt(document.getElementById('rel_mes').value);
+  const ano=parseInt(document.getElementById('rel_ano').value);
+  const cont=document.getElementById('relatorio_content');
+  let entradas=0,juros=0,multas=0,amortizacoes=0,contrAtivos=0,contrVencidos=0;
+  const detalhes=[];
+
+  contratos.forEach((c,i)=>{
+    const pgs=getPgs(i).filter(p=>{
+      const d=new Date(p.data+'T00:00:00');
+      return d.getMonth()===mes&&d.getFullYear()===ano;
+    });
+    pgs.forEach(p=>{
+      const v=parseFloat(p.valor)||0;
+      entradas+=v;
+      if(p.tipo==='juros') juros+=v;
+      else if(p.tipo==='amortizacao'||p.tipo==='quitacao') amortizacoes+=v;
+      else if(p.tipo==='reparcelamento') juros+=v;
+      detalhes.push({nome:c.nome,tipo:p.tipo,valor:v,data:p.data});
+    });
+    if(!isQuitado(i)){contrAtivos++;const calc=calcContrato(i);if(calc.atrasado)contrVencidos++;}
+  });
+
+  const minhaParte=contratos.reduce((s,c,i)=>{
+    const pgs=getPgs(i).filter(p=>{const d=new Date(p.data+'T00:00:00');return d.getMonth()===mes&&d.getFullYear()===ano;});
+    const pct=c.sociedade==='sim'?(parseFloat(c.minhaPct)||50):100;
+    return s+pgs.reduce((ss,p)=>ss+(parseFloat(p.valor)||0),0)*(pct/100);
+  },0);
+
+  cont.innerHTML=`
+    <div class="rel-section">
+      <div class="rel-title">📊 ${MESES[mes]} ${ano}</div>
+      <div class="rel-row"><span>Total recebido</span><span style="color:var(--accent)">${fmt(entradas)}</span></div>
+      <div class="rel-row"><span>Sua parte</span><span style="color:var(--accent3)">${fmt(minhaParte)}</span></div>
+      <div class="rel-row"><span>Juros recebidos</span><span style="color:var(--accent4)">${fmt(juros)}</span></div>
+      <div class="rel-row"><span>Amortizações/Quitações</span><span>${fmt(amortizacoes)}</span></div>
+      <div class="rel-row"><span>Contratos ativos</span><span>${contrAtivos}</span></div>
+      <div class="rel-row"><span>Em atraso</span><span style="color:var(--accent2)">${contrVencidos}</span></div>
+    </div>
+    ${detalhes.length?`<div class="rel-section">
+      <div class="rel-title">📋 Movimentações</div>
+      ${detalhes.map(d=>`<div class="rel-row"><span>${d.nome} <span style="color:var(--muted);font-size:10px">(${{'juros':'Juros','amortizacao':'Amort.','quitacao':'Quit.','reparcelamento':'Reparc.'}[d.tipo]||d.tipo})</span></span><span style="color:var(--accent)">${fmt(d.valor)}</span></div>`).join('')}
+    </div>`:'<div style="color:var(--muted);font-size:12px;padding:12px 0;">Nenhuma movimentação registrada neste mês.</div>'}
+    <div class="rel-total"><span>TOTAL LÍQUIDO</span><span style="color:var(--accent)">${fmt(entradas)}</span></div>`;
+}
+
+// ============================================================
+// CADASTRO DE SÓCIOS
+// ============================================================
+function adicionarSocio(){
+  const nome=document.getElementById('socio_nome').value.trim();
+  if(!nome){alert('Informe o nome do sócio.');return;}
+  const tel=document.getElementById('socio_tel').value.trim();
+  socios.push({nome,tel});
+  salvarDados();
+  document.getElementById('socio_nome').value='';
+  document.getElementById('socio_tel').value='';
+  renderSociosCadastro();
+}
+
+function removerSocio(i){
+  if(!confirm('Remover sócio '+socios[i].nome+'?')) return;
+  socios.splice(i,1);
+  salvarDados().then(()=>renderSociosCadastro());
+}
+
+function renderSociosCadastro(){
+  const cont=document.getElementById('socios_lista');
+  if(!cont) return;
+  if(!socios.length){cont.innerHTML='<div style="color:var(--muted);font-size:11px;margin-bottom:8px;">Nenhum sócio cadastrado.</div>';return;}
+  cont.innerHTML=socios.map((s,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-radius:6px;margin-bottom:5px;">
+      <div>
+        <span style="font-weight:700;font-size:12px;">${s.nome}</span>
+        ${s.tel?`<span style="color:var(--muted);font-size:10px;margin-left:8px;">${s.tel}</span>`:''}
+      </div>
+      <button onclick="removerSocio(${i})" style="background:none;border:none;color:var(--accent2);cursor:pointer;font-size:13px;">✕</button>
+    </div>`).join('');
+}
+
+// ============================================================
+// PAINEL SÓCIO
+// ============================================================
+function renderSocio(){
+  const cont=document.getElementById('socio_content');
+  const contratosSocio=contratos.filter(c=>c.sociedade==='sim');
+  if(!contratosSocio.length&&!socios.length){
+    cont.innerHTML='<div class="empty">Nenhum contrato em sociedade.<br>Cadastre sócios em ⚙️ Config.</div>';return;
+  }
+
+  // Total geral minha parte
+  const minhaTotal=contratos.reduce((s,c,i)=>{
+    if(c.sociedade!=='sim') return s;
+    const calc=calcContrato(i);
+    const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+    return s+tv*(parseFloat(c.minhaPct)||50)/100;
+  },0);
+
+  let html=`<div class="summary-cards" style="margin-bottom:14px;">
+    <div class="card"><div class="card-label">Minha Parte Total</div><div class="card-value yellow">${fmt(minhaTotal)}</div></div>
+    <div class="card"><div class="card-label">Contratos Partilhados</div><div class="card-value purple">${contratosSocio.length}</div></div>
+  </div>`;
+
+  // Aba por sócio
+  if(socios.length>0){
+    socios.forEach((s,si)=>{
+      const contrsSocio=contratos.map((c,i)=>({c,i})).filter(({c})=>c.sociedade==='sim'&&String(c.socioId)===String(si));
+      const totalSocio=contrsSocio.reduce((sum,{c,i})=>{
+        const calc=calcContrato(i);
+        const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+        return sum+tv*(100-(parseFloat(c.minhaPct)||50))/100;
+      },0);
+      const minhaNaSocio=contrsSocio.reduce((sum,{c,i})=>{
+        const calc=calcContrato(i);
+        const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+        return sum+tv*(parseFloat(c.minhaPct)||50)/100;
+      },0);
+
+      html+=`<div class="socio-card" style="margin-bottom:12px;">
+        <div class="socio-nome">🤝 ${s.nome}${s.tel?` <span style="font-size:10px;color:var(--muted);font-weight:400;">${s.tel}</span>`:''}</div>
+        <div class="summary-cards" style="margin-bottom:10px;">
+          <div class="card"><div class="card-label">Parte do Sócio</div><div class="card-value purple">${fmt(totalSocio)}</div></div>
+          <div class="card"><div class="card-label">Minha Parte</div><div class="card-value yellow">${fmt(minhaNaSocio)}</div></div>
+        </div>`;
+
+      if(!contrsSocio.length){
+        html+=`<div style="color:var(--muted);font-size:11px;padding:6px 0;">Nenhum contrato vinculado a este sócio.</div>`;
+      } else {
+        contrsSocio.forEach(({c,i})=>{
+          const calc=calcContrato(i);
+          const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+          const minha=tv*(parseFloat(c.minhaPct)||50)/100;
+          const socioV=tv*(100-(parseFloat(c.minhaPct)||50))/100;
+          html+=`<div class="contrato-info" style="padding:6px 0;border-top:1px solid var(--border);">
+            <div class="info-item"><b>${c.nome}</b></div>
+            <div class="info-item">Total <span>${fmt(tv)}</span></div>
+            <div class="info-item">Minha parte (${c.minhaPct}%) <span style="color:var(--accent3)">${fmt(minha)}</span></div>
+            <div class="info-item">Parte ${s.nome} (${100-parseFloat(c.minhaPct)}%) <span style="color:var(--accent5)">${fmt(socioV)}</span></div>
+          </div>`;
+        });
+      }
+      html+=`</div>`;
+    });
+  } else {
+    // fallback sem sócios cadastrados — agrupa só por %
+    html+=contratos.map((c,i)=>{
+      if(c.sociedade!=='sim') return '';
+      const calc=calcContrato(i);
+      const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+      const minha=tv*(parseFloat(c.minhaPct)||50)/100;
+      const socio=tv*(100-(parseFloat(c.minhaPct)||50))/100;
+      return `<div class="socio-card">
+        <div class="socio-nome">${c.nome}</div>
+        <div class="contrato-info">
+          <div class="info-item">Total aberto <span>${fmt(tv)}</span></div>
+          <div class="info-item">Minha parte (${c.minhaPct}%) <span style="color:var(--accent3)">${fmt(minha)}</span></div>
+          <div class="info-item">Parte sócio (${100-parseFloat(c.minhaPct)}%) <span style="color:var(--accent5)">${fmt(socio)}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  cont.innerHTML=html;
+}
+
+// ============================================================
+// CONFIG
+// ============================================================
+async function salvarConfig(){
+  config={
+    nome:document.getElementById('cfg_nome').value,
+    pix:document.getElementById('cfg_pix').value,
+    pixTipo:document.getElementById('cfg_pixTipo').value,
+    tel:document.getElementById('cfg_tel').value,
+    obs:document.getElementById('cfg_obs').value
+  };
+  await salvarDados();alert('Configurações salvas!');
+}
+async function limparTudo(){
+  if(!confirm('Apagar TODOS os dados? Isso não pode ser desfeito.'))return;
+  contratos=[];pagamentos={};config={};socios=[];await salvarDados();renderContratos();carregarConfig();renderSociosCadastro();alert('Dados apagados.');
+}
+
+// ============================================================
+// BACKUP / RESTAURAR / PDF
+// ============================================================
+function backupDados(){
+  const data={contratos,pagamentos,config,socios,exportadoEm:new Date().toISOString()};
+  const json=JSON.stringify(data,null,2);
+  // Método 1: download direto
+  try{
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='contratos_backup_'+today.toISOString().split('T')[0]+'.json';
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},2000);
+    return;
+  }catch(e1){}
+  // Método 2: data URI
+  try{
+    const uri='data:application/json;charset=utf-8,'+encodeURIComponent(json);
+    const a=document.createElement('a');
+    a.href=uri;
+    a.download='contratos_backup_'+today.toISOString().split('T')[0]+'.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return;
+  }catch(e2){}
+  // Método 3: nova janela com JSON para copiar
+  const w=window.open('');
+  if(w){
+    w.document.write('<html><body><h3>Copie e salve como .json</h3><pre style="font-size:11px;word-break:break-all;white-space:pre-wrap;">'+json+'</pre></body></html>');
+    w.document.close();
+  } else {
+    // Método 4: prompt para copiar
+    prompt('Copie e salve como backup.json:', json);
+  }
+}
+function restaurarDados(){document.getElementById('inputRestore').click();}
+function lerBackup(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(d.contratos){
+        contratos=d.contratos;pagamentos=d.pagamentos||{};config=d.config||{};socios=d.socios||[];
+        carregarConfig();renderSociosCadastro();renderContratos();
+        salvarDados().then(()=>alert('Backup restaurado e salvo na nuvem!'));
+      } else alert('Arquivo inválido.');
+    } catch{alert('Erro ao ler arquivo.');}
+  };r.readAsText(f);
+  e.target.value='';
+}
+
+function exportarPDF(){
+  const w=window.open('','_blank');
+  const linhas=contratos.map((c,i)=>{
+    const calc=calcContrato(i);
+    const tv=calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0;
+    const status=isQuitado(i)?'Quitado':calc.atrasado?`${calc.diasAtraso}d atraso`:'Em dia';
+    return `<tr><td>${c.nome}</td><td>${c.modalidade}</td><td>${fmt(parseFloat(c.principal))}</td><td>${fmt(tv)}</td><td>${status}</td><td>${c.sociedade==='sim'?c.minhaPct+'%':'100%'}</td></tr>`;
+  }).join('');
+  w.document.write(`<html><head><title>Relatório de Contratos</title><style>
+    body{font-family:Arial,sans-serif;padding:20px;font-size:12px;}
+    h1{font-size:18px;margin-bottom:4px;}
+    .sub{color:#666;margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;}
+    th{background:#222;color:#fff;padding:8px;text-align:left;}
+    td{padding:7px;border-bottom:1px solid #ddd;}
+    tr:nth-child(even){background:#f9f9f9;}
+    .total{font-weight:bold;margin-top:12px;font-size:14px;}
+  </style></head><body>
+  <h1>💰 Relatório de Contratos</h1>
+  <div class="sub">Gerado em ${today.toLocaleDateString('pt-BR')} — ${config.nome||''}</div>
+  <table><thead><tr><th>Cliente</th><th>Tipo</th><th>Principal</th><th>Em Aberto</th><th>Status</th><th>Minha Parte</th></tr></thead>
+  <tbody>${linhas}</tbody></table>
+  <p class="total">Total em carteira: ${fmt(contratos.reduce((s,c,i)=>{const calc=calcContrato(i);return s+(calc.modalidade==='diario'?calc.totalFinal:calc.totalParcela||0);},0))}</p>
+  </body></html>`);
+  w.document.close();setTimeout(()=>w.print(),500);
+}
+
+// ============================================================
+// REMODELAGEM
+// ============================================================
+let remIdx=-1;
+
+function abrirRemodelagem(i){
+  remIdx=i;
+  const c=contratos[i];
+  const versao=c.versoes?c.versoes.length+1:2;
+  document.getElementById('rem_titulo').textContent=`📝 Remodelar — ${c.nome} (v${versao})`;
+  document.getElementById('rem_dataInicio').value=today.toISOString().split('T')[0];
+  document.getElementById('rem_motivo').value='';
+  // Pré-preencher com valores atuais
+  document.getElementById('rem_principal').value=c.principal||'';
+  document.getElementById('rem_modalidade').value=c.modalidade||'mensal';
+  document.getElementById('rem_tipoJuros').value=c.tipoJuros||'percentual';
+  document.getElementById('rem_juros').value=c.juros||'';
+  document.getElementById('rem_diaVenc').value=c.diaVenc||'';
+  document.getElementById('rem_parcelas').value=c.parcelas||'';
+  document.getElementById('rem_jurosDiario').value=c.jurosDiario||'';
+  document.getElementById('rem_carencia').value=c.carencia||'';
+  document.getElementById('rem_prazo').value=c.prazo||'';
+  document.getElementById('rem_diasUteis').value=c.diasUteis||'nao';
+  document.getElementById('rem_multa').value=c.multa||'';
+  document.getElementById('rem_multaFixa').value=c.multaFixa||'';
+  toggleModalidade('rem');
+  toggleJuros('rem');
+  // Reset parcelas
+  parcelasRem=c.parcelasCustom?[...c.parcelasCustom.map(p=>({data:p.data,valor:p.valor}))]:[];
+  renderParcelasRem();
+  // Pré-preencher data base sugestão com amanhã
+  const amanha=new Date(today); amanha.setDate(amanha.getDate()+1);
+  const remDB=document.getElementById('rem_sugestao_dataBase');
+  if(remDB) remDB.value=amanha.toISOString().split('T')[0];
+  document.getElementById('modalRemodelagem').classList.add('open');
+}
+
+function confirmarRemodelagem(){
+  const i=remIdx;
+  if(i<0) return;
+  const c=contratos[i];
+  const motivo=document.getElementById('rem_motivo').value||'Remodelagem';
+  const dataInicio=document.getElementById('rem_dataInicio').value;
+
+  // Arquivar versão atual
+  if(!c.versoes) c.versoes=[];
+  const versaoAtual={
+    versao: c.versoes.length+1,
+    dataInicio: c.dataInicio,
+    dataFim: dataInicio,
+    motivo: motivo,
+    snapshot:{
+      principal:c.principal,
+      modalidade:c.modalidade,
+      tipoJuros:c.tipoJuros,
+      juros:c.juros,
+      diaVenc:c.diaVenc,
+      parcelas:c.parcelas,
+      jurosDiario:c.jurosDiario,
+      carencia:c.carencia,
+      prazo:c.prazo,
+      diasUteis:c.diasUteis,
+      multa:c.multa,
+      multaFixa:c.multaFixa
+    },
+    pagamentos:[...(pagamentos[i]||[])]
+  };
+  c.versoes.push(versaoAtual);
+
+  // Zerar pagamentos do ciclo atual (arquivados na versão)
+  pagamentos[i]=[];
+
+  // Aplicar novos valores
+  c.dataInicio=dataInicio;
+  c.principal=document.getElementById('rem_principal').value;
+  c.modalidade=document.getElementById('rem_modalidade').value;
+  c.tipoJuros=document.getElementById('rem_tipoJuros').value;
+  c.juros=document.getElementById('rem_juros').value;
+  c.diaVenc=document.getElementById('rem_diaVenc').value;
+  c.parcelas=document.getElementById('rem_parcelas').value;
+  c.jurosDiario=document.getElementById('rem_jurosDiario').value;
+  c.carencia=document.getElementById('rem_carencia').value;
+  c.prazo=document.getElementById('rem_prazo').value;
+  c.diasUteis=document.getElementById('rem_diasUteis').value;
+  c.multa=document.getElementById('rem_multa').value;
+  c.multaFixa=document.getElementById('rem_multaFixa').value;
+
+  // Salvar parcelas personalizadas se modalidade for personalizado
+  if(c.modalidade==='personalizado'){
+    c.parcelasCustom=parcelasRem.map(p=>({data:p.data,valor:p.valor}));
+  } else {
+    c.parcelasCustom=[];
+  }
+
+  salvarDados().then(()=>{closeModal('modalRemodelagem');renderContratos();alert(`Remodelado! Versão ${versaoAtual.versao} arquivada.`);});
+}
+
+// ============================================================
+// PARCELAS REMODELAGEM
+// ============================================================
+let parcelasRem=[];
+
+function addParcelaRem(){
+  parcelasRem.push({data:'',valor:''});
+  renderParcelasRem();
+}
+
+function remParcelaRem(i){
+  parcelasRem.splice(i,1);
+  renderParcelasRem();
+}
+
+function renderParcelasRem(){
+  const cont=document.getElementById('rem_parcelas_custom');
+  if(!cont) return;
+  cont.innerHTML=parcelasRem.map((p,i)=>`
+    <div class="parcela-custom-row">
+      <input type="date" value="${p.data}" oninput="parcelasRem[${i}].data=this.value;atualizarResumoRem()">
+      <input type="number" placeholder="R$" value="${p.valor}" oninput="parcelasRem[${i}].valor=this.value;atualizarResumoRem()">
+      <button onclick="remParcelaRem(${i})" style="background:none;border:none;color:var(--accent2);cursor:pointer;font-size:14px;">✕</button>
+    </div>`).join('');
+  atualizarResumoRem();
+}
+
+function gerarSugestaoRem(){
+  const principal=parseFloat(document.getElementById('rem_principal').value)||0;
+  const n=parseInt(document.getElementById('rem_sugestao_n').value)||3;
+  const tipo=document.getElementById('rem_sugestao_tipo').value;
+  const jurosTotal=parseFloat(document.getElementById('rem_sugestao_juros').value)||0;
+  const dataBaseStr=document.getElementById('rem_sugestao_dataBase').value;
+  if(!principal){alert('Informe o valor principal primeiro.');return;}
+  if(!dataBaseStr){alert('Informe o primeiro vencimento.');return;}
+
+  const dataBase=new Date(dataBaseStr+'T00:00:00');
+  parcelasRem=[];
+  const totalComJuros=principal*(1+jurosTotal/100);
+
+  for(let k=0;k<n;k++){
+    const d=new Date(dataBase);
+    d.setMonth(d.getMonth()+k);
+    let valor=0;
+    if(tipo==='igual'){
+      valor=(totalComJuros/n);
+    } else if(tipo==='juros_fixo'){
+      // Juros fixo por parcela + amortização proporcional
+      const jurosParcela=principal*(jurosTotal/100/n);
+      const amortParcela=principal/n;
+      valor=jurosParcela+amortParcela;
+    } else {
+      valor=0; // livre — usuário preenche
+    }
+    parcelasRem.push({data:d.toISOString().split('T')[0],valor:valor>0?valor.toFixed(2):''});
+  }
+  renderParcelasRem();
+}
+
+function atualizarResumoRem(){
+  const principal=parseFloat(document.getElementById('rem_principal').value)||0;
+  const total=parcelasRem.reduce((s,p)=>s+(parseFloat(p.valor)||0),0);
+  const res=document.getElementById('rem_resumo_personalizado');
+  if(!res||!parcelasRem.length){if(res)res.innerHTML='';return;}
+  res.innerHTML=`<div class="result-box">
+    <div class="result-row"><span>Nº de parcelas</span><span>${parcelasRem.length}</span></div>
+    <div class="result-row"><span>Total a receber</span><span style="color:var(--accent)">${fmt(total)}</span></div>
+    <div class="result-row"><span>Juros total</span><span style="color:var(--accent3)">${fmt(Math.max(0,total-principal))}</span></div>
+  </div>`;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function carregarDados(){
+  mostrarLoading(true);
+
+  // Sempre carrega localStorage primeiro para resposta imediata
+  contratos = JSON.parse(localStorage.getItem('contratos_v3')||'[]');
+  pagamentos = JSON.parse(localStorage.getItem('pagamentos_v3')||'{}');
+  config = JSON.parse(localStorage.getItem('config_v3')||'{}');
+  socios = JSON.parse(localStorage.getItem('socios_v3')||'[]');
+
+  // Renderiza imediatamente com dados locais
+  dadosCarregados = true;
+  carregarConfig();
+  renderSociosCadastro();
+  renderContratos();
+  mostrarLoading(false);
+
+  // Depois tenta sincronizar com Supabase em background
+  try {
+    const rows = await supaFetch('dados?id=eq.1&select=*');
+    if(rows && rows.length > 0){
+      const d = rows[0];
+      const supaContratos = d.contratos || [];
+      // Usa Supabase se tiver mais dados que o local
+      if(supaContratos.length >= contratos.length){
+        contratos = supaContratos;
+        pagamentos = d.pagamentos || {};
+        config = d.config || {};
+        socios = d.socios || [];
+        // Atualiza localStorage com dados do Supabase
+        localStorage.setItem('contratos_v3', JSON.stringify(contratos));
+        localStorage.setItem('pagamentos_v3', JSON.stringify(pagamentos));
+        localStorage.setItem('config_v3', JSON.stringify(config));
+        localStorage.setItem('socios_v3', JSON.stringify(socios));
+        carregarConfig();
+        renderSociosCadastro();
+        renderContratos();
+      } else if(contratos.length > 0) {
+        // Local tem mais dados — salva no Supabase
+        await salvarDados();
+      }
+    } else if(contratos.length > 0) {
+      // Supabase vazio mas local tem dados — sobe para nuvem
+      await salvarDados();
+    }
+  } catch(e) {
+    console.warn('Supabase indisponível, usando local:', e.message);
+    mostrarErro('Offline — dados locais. Reconecte para sincronizar.');
+  }
+}
+
+function mostrarLoading(show){
+  let el = document.getElementById('loadingOverlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'loadingOverlay';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(10,10,15,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+    el.innerHTML = '<div style="font-size:28px;margin-bottom:12px;">💰</div><div style="font-family:Syne,sans-serif;font-size:14px;color:#00ff88;font-weight:700;">Carregando...</div>';
+    document.body.appendChild(el);
+  }
+  el.style.display = show ? 'flex' : 'none';
+}
+
+function mostrarErro(msg){
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2a0010;border:1px solid #ff4466;color:#ff4466;padding:8px 16px;border-radius:6px;font-size:11px;font-family:Space Mono,monospace;z-index:999;';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 4000);
+}
+
+carregarDados();
+</script>
+</body>
+</html>
